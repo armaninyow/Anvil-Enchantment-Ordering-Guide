@@ -5,8 +5,6 @@
   <summary></summary>
    
 A mod that embeds an enchantment merge optimizer directly into the vanilla Anvil GUI.
-
-The enchantment merge optimization logic used in this mod is based on the work found at https://github.com/iamcal/enchant-order. A sincere thank you to the author [iamcal](https://github.com/iamcal) for allowing the use of their logic in this project.
 </details>
 
 ![Mod Icon](src/main/resources/assets/aeog/icon.png)
@@ -42,11 +40,8 @@ When you open an anvil, a guide button appears on the left side of the GUI. Clic
 </details>
 
 ## Acknowledgements
-<details>
-  <summary></summary>
    
 The enchantment merge optimization logic used in this mod is based on the work found at https://github.com/iamcal/enchant-order. A sincere thank you to the author [iamcal](https://github.com/iamcal) for allowing the use of their logic in this project.
-</details>
 
 ## Support
 <details>
