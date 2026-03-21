@@ -101,7 +101,13 @@ public class AeogOverlayScreen {
 		if (mc.getSoundManager() == null) return;
 		SoundEvent event = net.minecraft.registry.Registries.SOUND_EVENT.get(CLICK_SOUND);
 		if (event == null) event = SoundEvent.of(CLICK_SOUND);
-		mc.getSoundManager().play(PositionedSoundInstance.master(event, 1.0f, 0.25f));
+		mc.getSoundManager().play(new PositionedSoundInstance(
+			event.id(),
+			net.minecraft.sound.SoundCategory.MASTER,
+			0.25f, 1.0f, net.minecraft.util.math.random.Random.create(),
+			false, 0,
+			net.minecraft.client.sound.SoundInstance.AttenuationType.NONE,
+			0.0, 0.0, 0.0, true));
 	}
 
 	// ── Layout constants ──────────────────────────────────────────────────────
@@ -1156,7 +1162,8 @@ public class AeogOverlayScreen {
 				? s.get(DataComponentTypes.STORED_ENCHANTMENTS)
 				: s.get(DataComponentTypes.ENCHANTMENTS);
 			int enchSize = enchComp != null ? enchComp.getSize() : 0;
-			if (enchSize != enchants.size()) continue;
+
+			if (!enchants.isEmpty() && enchSize != enchants.size()) continue;
 
 			if (enchComp != null && !enchants.isEmpty()) {
 				boolean allMatch = true;
@@ -1221,6 +1228,11 @@ public class AeogOverlayScreen {
 			case "warped_fungus_on_a_stick" -> s.isOf(Items.WARPED_FUNGUS_ON_A_STICK);
 			case "pumpkin"                  -> s.isOf(Items.CARVED_PUMPKIN);
 			case "mace"                     -> s.isOf(Items.MACE);
+			case "spear"                    -> {
+				// Matches all spear tiers: wooden_spear, stone_spear, iron_spear, golden_spear, diamond_spear, netherite_spear
+				String path = net.minecraft.registry.Registries.ITEM.getId(s.getItem()).getPath();
+				yield path.endsWith("_spear") || path.equals("spear");
+			}
 			default                         -> false;
 		};
 	}

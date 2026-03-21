@@ -33,6 +33,7 @@ public final class EnchantData {
 		"sword",
 		"axe",
 		"mace",
+		"spear",
 		"trident",
 		"shield",
 		"bow",
@@ -55,7 +56,7 @@ public final class EnchantData {
 		reg("aqua_affinity",        1, 2, List.of(),
 			List.of("helmet","turtle_shell"));
 		reg("bane_of_arthropods",   5, 1, List.of("smite","sharpness","density","breach"),
-			List.of("sword","axe","mace"));
+			List.of("sword","axe","mace","spear"));
 		reg("blast_protection",     4, 2, List.of("fire_protection","protection","projectile_protection"),
 			List.of("helmet","chestplate","leggings","boots","turtle_shell"));
 		reg("channeling",           1, 4, List.of("riptide"),
@@ -67,7 +68,7 @@ public final class EnchantData {
 		reg("feather_falling",      4, 1, List.of(),
 			List.of("boots"));
 		reg("fire_aspect",          2, 2, List.of(),
-			List.of("sword","mace"));
+			List.of("sword","mace","spear"));
 		reg("fire_protection",      4, 1, List.of("blast_protection","protection","projectile_protection"),
 			List.of("helmet","chestplate","leggings","boots","turtle_shell"));
 		reg("flame",                1, 2, List.of(),
@@ -81,9 +82,9 @@ public final class EnchantData {
 		reg("infinity",             1, 4, List.of("mending"),
 			List.of("bow"));
 		reg("knockback",            2, 1, List.of(),
-			List.of("sword"));
+			List.of("sword","spear"));
 		reg("looting",              3, 2, List.of(),
-			List.of("sword"));
+			List.of("sword","spear"));
 		reg("loyalty",              3, 1, List.of("riptide"),
 			List.of("trident"));
 		reg("luck_of_the_sea",      3, 2, List.of(),
@@ -94,7 +95,7 @@ public final class EnchantData {
 			List.of("helmet","chestplate","leggings","boots","pickaxe","shovel","axe","sword","hoe",
 				"brush","fishing_rod","bow","shears","flint_and_steel","carrot_on_a_stick",
 				"warped_fungus_on_a_stick","shield","elytra","trident","turtle_shell","crossbow",
-				"mace"));
+				"mace","spear"));
 		reg("multishot",            1, 2, List.of("piercing"),
 			List.of("crossbow"));
 		reg("piercing",             4, 1, List.of("multishot"),
@@ -112,15 +113,17 @@ public final class EnchantData {
 		reg("riptide",              3, 2, List.of("channeling","loyalty"),
 			List.of("trident"));
 		reg("sharpness",            5, 1, List.of("bane_of_arthropods","smite"),
-			List.of("sword","axe"));
+			List.of("sword","axe","spear"));
 		reg("silk_touch",           1, 4, List.of("fortune"),
 			List.of("pickaxe","shovel","axe","hoe"));
 		reg("smite",                5, 1, List.of("bane_of_arthropods","sharpness","density","breach"),
-			List.of("sword","axe","mace"));
+			List.of("sword","axe","mace","spear"));
 		reg("soul_speed",           3, 4, List.of(),
 			List.of("boots"));
 		reg("sweeping",             3, 2, List.of(),
 			List.of("sword"));
+		reg("lunge",                3, 1, List.of(),
+			List.of("spear"));
 		reg("swift_sneak",          3, 4, List.of(),
 			List.of("leggings"));
 		reg("thorns",               3, 4, List.of(),
@@ -129,14 +132,14 @@ public final class EnchantData {
 			List.of("helmet","chestplate","leggings","boots","pickaxe","shovel","axe","sword","hoe",
 				"brush","fishing_rod","bow","shears","flint_and_steel","carrot_on_a_stick",
 				"warped_fungus_on_a_stick","shield","elytra","trident","turtle_shell","crossbow",
-				"mace"));
+				"mace","spear"));
 		reg("binding_curse",        1, 4, List.of(),
 			List.of("helmet","chestplate","leggings","boots","elytra","pumpkin","turtle_shell"));
 		reg("vanishing_curse",      1, 4, List.of(),
 			List.of("helmet","chestplate","leggings","boots","pickaxe","shovel","axe","sword","hoe",
 				"brush","fishing_rod","bow","shears","flint_and_steel","carrot_on_a_stick",
 				"warped_fungus_on_a_stick","shield","elytra","pumpkin","trident","turtle_shell",
-				"crossbow","mace"));
+				"crossbow","mace","spear"));
 		reg("density",              5, 1, List.of("breach","smite","bane_of_arthropods"),
 			List.of("mace"));
 		reg("breach",               4, 2, List.of("density","smite","bane_of_arthropods"),

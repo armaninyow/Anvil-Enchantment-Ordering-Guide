@@ -147,9 +147,15 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 	@Unique private void playAeogClick() {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		if (mc.getSoundManager() == null) return;
-		Identifier id = Identifier.of("aeog", "click_stereo");
-		SoundEvent ev = net.minecraft.registry.Registries.SOUND_EVENT.get(id);
-		if (ev == null) ev = SoundEvent.of(id);
-		mc.getSoundManager().play(PositionedSoundInstance.master(ev, 1.0f, 0.25f));
+		net.minecraft.util.Identifier id = net.minecraft.util.Identifier.of("aeog", "click_stereo");
+		net.minecraft.sound.SoundEvent ev = net.minecraft.registry.Registries.SOUND_EVENT.get(id);
+		if (ev == null) ev = net.minecraft.sound.SoundEvent.of(id);
+		mc.getSoundManager().play(new net.minecraft.client.sound.PositionedSoundInstance(
+			ev.id(),
+			net.minecraft.sound.SoundCategory.MASTER,
+			0.25f, 1.0f, net.minecraft.util.math.random.Random.create(),
+			false, 0,
+			net.minecraft.client.sound.SoundInstance.AttenuationType.NONE,
+			0.0, 0.0, 0.0, true));
 	}
 }
