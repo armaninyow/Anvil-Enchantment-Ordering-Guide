@@ -1,0 +1,10 @@
+{
+	"click_stereo": {
+		"sounds": [
+			{
+				"name": "aeog:click_stereo",
+				"stream": false
+			}
+		]
+	}
+}
