@@ -36,7 +36,7 @@ When you open an anvil, a guide button appears on the left side of the GUI. Clic
 <details>
   <summary></summary>
    
-1.  **Requirements**: Ensure you have Minecraft 1.21.10, Fabric Loader 0.18.4, and the Fabric API installed.
+1.  **Requirements**: Ensure you have Minecraft 1.21.11, Fabric Loader 0.18.4, and the Fabric API installed.
 2.  **Download**: Get the latest `.jar` from [Modrinth](https://modrinth.com/mod/anvil-enchantment-ordering-guide) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/anvil-enchantment-ordering-guide).
 3.  **Setup**: Drop the file into your `%appdata%/.minecraft/mods` folder.
 </details>
