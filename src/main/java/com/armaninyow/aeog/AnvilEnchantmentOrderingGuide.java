@@ -16,6 +16,7 @@ public class AnvilEnchantmentOrderingGuide implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
+		com.armaninyow.dibs.config.AeogConfig.load();
 		AeogPackets.registerServerPackets();
 		LOGGER.info("[AEOG] Anvil Enchantment Ordering Guide initialized.");
 	}

@@ -147,7 +147,7 @@ public class AeogOverlayScreen {
 	private static final int NODE_SIZE = 26;
 	private static final int NODE_ICON = 16;
 	// Spacing — wide enough that result nodes never land on top of leaf nodes
-	private static final int H_GAP = 34;  // gap between node edges (leaf spacing = 26+34 = 60px)
+	private static final int H_GAP = 1;   // minimum gap between node edges — tightly packed
 	private static final int V_GAP = 30;  // gap between node bottom and result top
 
 	// ── Phase state ───────────────────────────────────────────────────────────
@@ -173,9 +173,60 @@ public class AeogOverlayScreen {
 	// Phase 3
 	private List<MergeInstruction> instructions = new ArrayList<>();
 	private float treeOffX = 0, treeOffY = 0;
+	private boolean loading = false;
+	private long    loadingStartMs = 0;
 	private boolean treeDragging = false;
 	private int treeDragStartX   = 0, treeDragStartY = 0;
 	private float treeDragOffX   = 0, treeDragOffY   = 0;
+
+	// ── Persistent state — survives anvil close/reopen ────────────────────────
+	private static Phase         s_phase         = Phase.ONE;
+	private static String        s_selectedItem  = null;
+	private static boolean       s_modeLevels    = true;
+	private static List<String>  s_itemEnchants  = new ArrayList<>();
+	private static List<List<String>> s_incompatGroups = new ArrayList<>();
+	private static List<Integer> s_groupVisible  = new ArrayList<>();
+	private static Map<String, Integer> s_selectedLevels = new LinkedHashMap<>();
+	private static int           s_scrollOffset  = 0;
+	private static List<MergeInstruction> s_instructions = new ArrayList<>();
+	private static float         s_treeOffX      = 0, s_treeOffY = 0;
+	public  static boolean       s_panelWasOpen  = false;
+
+	/** Save current instance state to static fields before the panel is destroyed. */
+	public void saveState() {
+		loading = false; // never persist a loading state across screen close
+		s_phase        = phase;
+		s_selectedItem = selectedItem;
+		s_modeLevels   = modeLevels;
+		s_itemEnchants = new ArrayList<>(itemEnchants);
+		s_incompatGroups = incompatGroups.stream()
+			.map(ArrayList::new).collect(java.util.stream.Collectors.toList());
+		s_groupVisible  = new ArrayList<>(groupVisible);
+		s_selectedLevels = new LinkedHashMap<>(selectedLevels);
+		s_scrollOffset  = scrollOffset;
+		s_instructions  = new ArrayList<>(instructions);
+		s_treeOffX      = treeOffX;
+		s_treeOffY      = treeOffY;
+	}
+
+	/** Restore state from static fields into the new instance. */
+	private void restoreState() {
+		phase        = s_phase;
+		selectedItem = s_selectedItem;
+		modeLevels   = s_modeLevels;
+		itemEnchants = new ArrayList<>(s_itemEnchants);
+		incompatGroups = s_incompatGroups.stream()
+			.map(ArrayList::new).collect(java.util.stream.Collectors.toList());
+		groupVisible  = new ArrayList<>(s_groupVisible);
+		selectedLevels.clear();
+		selectedLevels.putAll(s_selectedLevels);
+		scrollOffset  = s_scrollOffset;
+		instructions  = new ArrayList<>(s_instructions);
+		treeOffX      = s_treeOffX;
+		treeOffY      = s_treeOffY;
+		// Rebuild derived state
+		if (phase == Phase.THREE && !instructions.isEmpty()) buildTreeLayout();
+	}
 
 	/**
 	 * A positioned node in the tree.
@@ -208,7 +259,9 @@ public class AeogOverlayScreen {
 
 	// ── Constructor ───────────────────────────────────────────────────────────
 
-	public AeogOverlayScreen() {}
+	public AeogOverlayScreen() {
+		restoreState();
+	}
 
 	// ── Main entry ────────────────────────────────────────────────────────────
 
@@ -349,23 +402,30 @@ public class AeogOverlayScreen {
 			int slotX          = absX + PREV_W;
 			int defaultColor   = disabled ? 0xFF342F25 : 0xFF685E4A;
 			boolean enchSelected = selectedLevels.containsKey(enchant);
+			boolean isCurse    = enchant.equals("binding_curse") || enchant.equals("vanishing_curse");
 
-			// Enchant name — white if a level is selected, else default
+			// Enchant name — red if curse selected, white if selected, else default
 			String enchLabel = formatName(enchant);
 			int enchLabelW = tr.getWidth(enchLabel);
-			int enchColor = (!disabled && enchSelected) ? 0xFFFFFFFF : defaultColor;
+			int enchColor = disabled ? defaultColor
+				: (enchSelected && isCurse) ? 0xFFFC5454
+				: enchSelected ? 0xFFFFFFFF
+				: defaultColor;
 			ctx.drawText(tr, Text.literal(enchLabel),
 				slotX + SLOT_W / 2 - enchLabelW / 2, yTxt + (ROW_H - 8) / 2, enchColor, false);
 			yTxt += ROW_H;
 
-			// Level numbers — white if that specific level is selected, else default
+			// Level numbers — red if curse+selected, white if selected, else default
 			for (int lv = 1; lv <= def.levelMax(); lv++) {
 				int lvX     = absX + PREV_W + (lv - 1) * ROW_H;
 				String lvStr = String.valueOf(lv);
 				int lvStrW  = tr.getWidth(lvStr);
 				Integer sel = selectedLevels.get(enchant);
 				boolean isSel = sel != null && sel == lv;
-				int lvColor = (!disabled && isSel) ? 0xFFFFFFFF : defaultColor;
+				int lvColor = disabled ? defaultColor
+					: (isSel && isCurse) ? 0xFFFC5454
+					: isSel ? 0xFFFFFFFF
+					: defaultColor;
 				ctx.drawText(tr, Text.literal(lvStr),
 					lvX + ROW_H / 2 - lvStrW / 2, yTxt + (ROW_H - 8) / 2, lvColor, false);
 			}
@@ -424,6 +484,60 @@ public class AeogOverlayScreen {
 			renderNodeTooltip(ctx, hoveredNode, mx, my, tr);
 		}
 		renderBack(ctx, px, py, mx, my);
+
+		// Loading overlay — shown while waiting for the engine result
+		if (loading) {
+			renderLoadingOverlay(ctx, px, py, tr);
+		}
+	}
+
+	private static final int LOADING_BAR_W = 150;
+	private static final int LOADING_BAR_H = 2;
+
+	/** Expected calculation time in ms: 50 * 4^(n-9) + 1000, for n >= 10. */
+	private long expectedMs() {
+		int n = selectedLevels.size();
+		return (long)(50 * Math.pow(4.0, n - 9)) + 1000;
+	}
+
+	private void renderLoadingOverlay(DrawContext ctx, int px, int py, TextRenderer tr) {
+		int vpCX = px + P3_TREE_X + P3_TREE_W / 2;
+		int vpCY = py + P3_TREE_Y + P3_TREE_H / 2;
+
+		// Progress: clamp to 0.9 so bar never falsely completes before result arrives
+		float progress = (float)(System.currentTimeMillis() - loadingStartMs) / expectedMs();
+		progress = Math.min(progress, 0.9f);
+
+		String line1 = "Calculating...";
+		String line2 = "Please keep the anvil open.";
+		int line1W = tr.getWidth(line1);
+		int line2W = tr.getWidth(line2);
+
+		// Layout: line1 (8px) + 2px gap + line2 (8px) + 4px gap + bar (2px)
+		int totalH = 8 + 2 + 8 + 4 + LOADING_BAR_H;
+		int line1Y = vpCY - totalH / 2;
+		int line2Y = line1Y + 8 + 2;
+		int barY   = line2Y + 8 + 4;
+		int barX   = vpCX - LOADING_BAR_W / 2;
+
+		// Line 1 shadow + text
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line1),
+			vpCX - line1W / 2 + 1, line1Y + 1, 0xFF3F3F3F, false);
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line1),
+			vpCX - line1W / 2, line1Y, 0xFFFFFFFF, false);
+
+		// Line 2 shadow + text
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line2),
+			vpCX - line2W / 2 + 1, line2Y + 1, 0xFF3F3F3F, false);
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line2),
+			vpCX - line2W / 2, line2Y, 0xFFFFFFFF, false);
+
+		// Bar background (black)
+		ctx.fill(barX, barY, barX + LOADING_BAR_W, barY + LOADING_BAR_H, 0xFF000000);
+		// Bar fill (green)
+		int fillW = (int)(LOADING_BAR_W * progress);
+		if (fillW > 0)
+			ctx.fill(barX, barY, barX + fillW, barY + LOADING_BAR_H, 0xFF00FF00);
 	}
 
 	private void renderTiledBg(DrawContext ctx, int x, int y) {
@@ -515,16 +629,27 @@ public class AeogOverlayScreen {
 		// We classify by: chain step = left.work > 0, OR (left.work==0 AND left is the item).
 		// Everything else is a book pair.
 
-		boolean[] isChain = new boolean[steps];
+		// ── Identify the item step and classify chain vs book-pair steps ──────
+		// The "item step" is the one whose left or right input is the actual item
+		// (work==0, id==selectedItem or "item"). It may be any step, not necessarily
+		// step 0 — the engine builds the full book tree first when there are many
+		// enchants, then merges the item in near the end.
+		int itemStepIdx = -1;
+		boolean itemIsLeft = true;
 		for (int i = 0; i < steps; i++) {
 			MergeInstruction ins = instructions.get(i);
-			boolean leftIsItem = ins.left().id().equals(selectedItem != null ? selectedItem : "")
-				|| ins.left().id().equals("item");
-			boolean leftIsPrevResult = ins.left().work() > 0;
-			isChain[i] = leftIsItem || leftIsPrevResult;
+			boolean lItem = ins.left().work() == 0
+				&& (ins.left().id().equals(selectedItem != null ? selectedItem : "")
+					|| ins.left().id().equals("item"));
+			boolean rItem = ins.right().work() == 0
+				&& (ins.right().id().equals(selectedItem != null ? selectedItem : "")
+					|| ins.right().id().equals("item"));
+			if (lItem || rItem) {
+				itemStepIdx = i;
+				itemIsLeft  = lItem;
+				break;
+			}
 		}
-		// Step 0 is always a chain step (base item + first book)
-		isChain[0] = true;
 
 		// ── Assign Y rows ─────────────────────────────────────────────────────
 		// Each chain step's result goes one row lower than the previous chain result.
@@ -545,90 +670,130 @@ public class AeogOverlayScreen {
 		// is already placed at chain_seq - 1, the book pair result should also be at chain_seq - 1.
 
 		// ── Assign Y rows ─────────────────────────────────────────────────────
-		// Chain steps get sequential rows 1, 2, 3...
-		// Book-pair results share the same row as the PREVIOUS chain result,
-		// i.e. one row above the chain step that consumes them.
-		// This produces the desired layout where book-pair leaves connect straight
-		// down to their result which sits at the same level as the incoming sword result.
-		int[] resultRow = new int[steps];
-		int chainSeq = 0;
-		for (int i = 0; i < steps; i++) {
-			if (isChain[i]) resultRow[i] = ++chainSeq;
-		}
-		// Book pairs: find the next chain step that consumes this book pair.
-		// Place the book pair at (consumingChainStep's row - 1) = same row as previous chain result.
-		for (int i = 0; i < steps; i++) {
-			if (!isChain[i]) {
-				int consumingRow = chainSeq; // default: last chain row
-				for (int j = i + 1; j < steps; j++) {
-					if (isChain[j]) { consumingRow = resultRow[j]; break; }
-				}
-				resultRow[i] = consumingRow - 1;
-			}
-		}
+		// Build an explicit map: for each step i, which step consumes its result
+		// (consumedBy[i]), and which result node is its left/right input
+		// (leftSrc[i], rightSrc[i] = step index, or -1 for leaf).
+		// Then propagate top-down: final step gets the highest row, and each step's
+		// row = its consumer's row - 1. Both inputs to any step always land on the
+		// same row by construction.
 
-		// ── Collect leaf nodes grouped by their role ─────────────────────────────
-		// For the desired layout, leaves are grouped in pairs: each chain step's
-		// left leaf (or previous chain result) sits beside the book-pair leaves
-		// that will merge with it. We build a column ordering:
-		//   [chain_leaf_0, chain_book_leaf_0, bookpair_leaf_L, bookpair_leaf_R, ...]
-		// Specifically:
-		//   - Slot 0: chain step 0's left leaf (the base item, e.g. sword)
-		//   - Slot 1: chain step 0's right leaf (first book)
-		//   - For each subsequent chain step that has a book-pair feeding its right:
-		//     - Slot: bookpair left leaf
-		//     - Slot: bookpair right leaf
-		//   - (The chain result that feeds as left input has no leaf — it's a result node)
-		//
-		// This is built by walking chain steps in order and interleaving book-pair leaves.
+		// Step 1: resolve which prior step produced each non-leaf input.
+		// Use a claimed[] array so each result is only matched once.
+		int[] leftSrc  = new int[steps]; // step index that produced left input, or -1
+		int[] rightSrc = new int[steps];
+		Arrays.fill(leftSrc,  -1);
+		Arrays.fill(rightSrc, -1);
+		boolean[] claimed = new boolean[steps];
 
-		// Map: chain step index → book pair step index that feeds it as right input
-		int[] chainToBookPair = new int[steps]; // -1 if no book pair
-		Arrays.fill(chainToBookPair, -1);
-		for (int i = 0; i < steps; i++) {
-			if (!isChain[i]) {
-				// Find the next chain step after i
-				for (int j = i + 1; j < steps; j++) {
-					if (isChain[j]) { chainToBookPair[j] = i; break; }
-				}
-			}
-		}
-
-		// Build leaf list in display order: sword, looting, then for each subsequent
-		// chain step, its associated book-pair leaves (if any).
-		// Non-chain right-input leaves that have no associated chain pairing go last.
-		List<String> leafKeyOrder = new ArrayList<>();
-		// Step 0: left leaf (sword) and right leaf (first book)
-		if (instructions.get(0).left().work() == 0)  leafKeyOrder.add("L0");
-		if (instructions.get(0).right().work() == 0) leafKeyOrder.add("R0");
-		// Steps 1..N: for chain steps, add their book-pair's leaves
-		for (int i = 1; i < steps; i++) {
-			if (isChain[i] && chainToBookPair[i] >= 0) {
-				int bp = chainToBookPair[i];
-				if (instructions.get(bp).left().work() == 0)  leafKeyOrder.add("L" + bp);
-				if (instructions.get(bp).right().work() == 0) leafKeyOrder.add("R" + bp);
-			}
-		}
-		// Any leaves not yet in order (e.g. book pairs that feed non-chain steps)
 		for (int i = 0; i < steps; i++) {
 			MergeInstruction ins = instructions.get(i);
-			if (ins.left().work() == 0  && !leafKeyOrder.contains("L" + i)) leafKeyOrder.add("L" + i);
+			if (ins.left().work() > 0) {
+				// Find most recent unclaimed prior step whose result work matches
+				for (int j = i - 1; j >= 0; j--) {
+					if (!claimed[j] && buildResult(instructions.get(j), false).work() == ins.left().work()) {
+						leftSrc[i] = j;
+						claimed[j] = true;
+						break;
+					}
+				}
+			}
+			if (ins.right().work() > 0) {
+				for (int j = i - 1; j >= 0; j--) {
+					if (!claimed[j] && buildResult(instructions.get(j), false).work() == ins.right().work()) {
+						rightSrc[i] = j;
+						claimed[j] = true;
+						break;
+					}
+				}
+			}
+		}
+
+		// Step 2: build consumedBy[] — which step i is an input to
+		int[] consumedBy = new int[steps];
+		Arrays.fill(consumedBy, -1);
+		for (int i = 0; i < steps; i++) {
+			if (leftSrc[i]  >= 0) consumedBy[leftSrc[i]]  = i;
+			if (rightSrc[i] >= 0) consumedBy[rightSrc[i]] = i;
+		}
+
+		// Step 3: assign rows top-down.
+		// Final step (steps-1) gets row = steps. Walk each step's inputs and set
+		// their row = this step's row - 1.
+		int[] resultRow = new int[steps];
+		resultRow[steps - 1] = steps;
+		for (int i = steps - 1; i >= 0; i--) {
+			int inputRow = resultRow[i] - 1;
+			if (inputRow < 1) inputRow = 1;
+			if (leftSrc[i]  >= 0 && resultRow[leftSrc[i]]  < inputRow) resultRow[leftSrc[i]]  = inputRow;
+			if (rightSrc[i] >= 0 && resultRow[rightSrc[i]] < inputRow) resultRow[rightSrc[i]] = inputRow;
+		}
+		// Any steps not yet assigned (disconnected leaf-only steps) get row 1
+		for (int i = 0; i < steps; i++) if (resultRow[i] == 0) resultRow[i] = 1;
+
+		// Step 4: normalise — compress to contiguous rows starting from 1
+		int[] sorted = resultRow.clone();
+		Arrays.sort(sorted);
+		Map<Integer, Integer> rowRemap = new LinkedHashMap<>();
+		int seq = 0;
+		for (int r : sorted) if (!rowRemap.containsKey(r)) rowRemap.put(r, ++seq);
+		for (int i = 0; i < steps; i++) resultRow[i] = rowRemap.get(resultRow[i]);
+
+		// ── Collect and order leaf nodes ──────────────────────────────────────
+		// The item leaf always goes first (leftmost). Then all book-pair groups
+		// follow, each pair's two leaves adjacent, sorted shallowest first.
+
+		// ── Collect and order leaf nodes ──────────────────────────────────────
+		// Sort ALL steps that have leaf inputs by resultRow, then emit their leaf
+		// keys in that order — item step always first. This handles chain steps
+		// with a leaf input (like step 4 above with R4) just as well as pure
+		// book-pair steps, since we no longer filter by isChain.
+		List<Integer> stepsWithLeaves = new ArrayList<>();
+		for (int i = 0; i < steps; i++) {
+			MergeInstruction ins = instructions.get(i);
+			if (ins.left().work() == 0 || ins.right().work() == 0) {
+				stepsWithLeaves.add(i);
+			}
+		}
+		stepsWithLeaves.sort((a, b) -> {
+			if (resultRow[a] != resultRow[b]) return Integer.compare(resultRow[a], resultRow[b]);
+			return Integer.compare(a, b);
+		});
+
+		List<String> leafKeyOrder = new ArrayList<>();
+		// Item step always first
+		if (itemStepIdx >= 0) {
+			String itemKey = itemIsLeft ? "L" + itemStepIdx : "R" + itemStepIdx;
+			String pairKey = itemIsLeft ? "R" + itemStepIdx : "L" + itemStepIdx;
+			MergeInstruction itemIns = instructions.get(itemStepIdx);
+			if ((itemIsLeft  ? itemIns.left()  : itemIns.right()).work() == 0) leafKeyOrder.add(itemKey);
+			if ((itemIsLeft  ? itemIns.right() : itemIns.left()).work()  == 0) leafKeyOrder.add(pairKey);
+		}
+		// All other steps with leaves, sorted by resultRow
+		for (int s : stepsWithLeaves) {
+			if (s == itemStepIdx) continue;
+			MergeInstruction ins = instructions.get(s);
+			if (ins.left().work()  == 0 && !leafKeyOrder.contains("L" + s)) leafKeyOrder.add("L" + s);
+			if (ins.right().work() == 0 && !leafKeyOrder.contains("R" + s)) leafKeyOrder.add("R" + s);
+		}
+		// Safety fallback
+		for (int i = 0; i < steps; i++) {
+			MergeInstruction ins = instructions.get(i);
+			if (ins.left().work()  == 0 && !leafKeyOrder.contains("L" + i)) leafKeyOrder.add("L" + i);
 			if (ins.right().work() == 0 && !leafKeyOrder.contains("R" + i)) leafKeyOrder.add("R" + i);
 		}
 
-		// Build the actual leaf list and leafNodeIdx map in display order
+		// Build the actual leaf list and leafNodeIdx map in display order.
 		List<MergeInstruction.NodeItem> leaves = new ArrayList<>();
 		Map<String, Integer> leafNodeIdx = new LinkedHashMap<>();
 		for (int i = 0; i < steps; i++) {
 			MergeInstruction ins = instructions.get(i);
-			if (ins.left().work() == 0)  leafNodeIdx.put("L" + i, -1);
+			if (ins.left().work()  == 0) leafNodeIdx.put("L" + i, -1);
 			if (ins.right().work() == 0) leafNodeIdx.put("R" + i, -1);
 		}
-		// Build leaves in display order
 		Map<String, MergeInstruction.NodeItem> keyToLeaf = new LinkedHashMap<>();
 		for (int i = 0; i < steps; i++) {
 			MergeInstruction ins = instructions.get(i);
-			if (ins.left().work() == 0)  keyToLeaf.put("L" + i, ins.left());
+			if (ins.left().work()  == 0) keyToLeaf.put("L" + i, ins.left());
 			if (ins.right().work() == 0) keyToLeaf.put("R" + i, ins.right());
 		}
 		for (String key : leafKeyOrder) {
@@ -657,7 +822,7 @@ public class AeogOverlayScreen {
 		}
 
 		// Centre the whole leaf row around 0
-		float leafTotalW = xCursor - H_GAP;
+		float leafTotalW = xCursor - (NODE_SIZE + H_GAP); // remove trailing slot
 		float leafStartX = -leafTotalW / 2.0f;
 
 		for (int i = 0; i < leafKeyOrder.size(); i++) {
@@ -670,20 +835,29 @@ public class AeogOverlayScreen {
 		}
 
 		// ── Add result nodes in instruction order ─────────────────────────────
-		// We track instruction index → result node index so later steps can find
-		// the result of an earlier step as their left/right input.
 		int[] instrResultNodeIdx = new int[steps];
 		Arrays.fill(instrResultNodeIdx, -1);
-		// Global set of result node indices already consumed as inputs — prevents reuse
-		Set<Integer> globalUsed = new LinkedHashSet<>();
 
 		for (int i = 0; i < steps; i++) {
 			MergeInstruction ins = instructions.get(i);
 			boolean isFinal = (i == steps - 1);
 
-			// Find left and right input node indices
-			int lIdx = resolveInputIdx(ins.left(),  i, true,  instrResultNodeIdx, leafNodeIdx, globalUsed);
-			int rIdx = resolveInputIdx(ins.right(), i, false, instrResultNodeIdx, leafNodeIdx, globalUsed);
+			// Resolve left input: if it came from a prior result, use leftSrc[i];
+			// otherwise it's a leaf, look up by positional key.
+			int lIdx;
+			if (leftSrc[i] >= 0) {
+				lIdx = instrResultNodeIdx[leftSrc[i]];
+			} else {
+				lIdx = leafNodeIdx.getOrDefault("L" + i, -1);
+			}
+
+			// Resolve right input similarly
+			int rIdx;
+			if (rightSrc[i] >= 0) {
+				rIdx = instrResultNodeIdx[rightSrc[i]];
+			} else {
+				rIdx = leafNodeIdx.getOrDefault("R" + i, -1);
+			}
 
 			// X = midpoint of left and right input centres
 			float lCx = lIdx >= 0 ? treeNodes.get(lIdx).x() + NODE_SIZE / 2.0f : 0;
@@ -698,6 +872,72 @@ public class AeogOverlayScreen {
 
 			if (lIdx >= 0) connectors.add(new Connector(lIdx, resIdx));
 			if (rIdx >= 0) connectors.add(new Connector(rIdx, resIdx));
+		}
+
+		// ── Separate overlapping nodes at the same Y row ──────────────────────
+		// When many enchants are selected, multiple result nodes at the same row can
+		// end up with X midpoints close enough that their 26px frames overlap. This
+		// post-pass iteratively pushes apart any overlapping same-row pair (splitting
+		// the overlap equally left and right), then re-centres each parent result node
+		// over its (now-shifted) children. Repeats up to 10 times until stable.
+		float minSep = NODE_SIZE + H_GAP;
+		for (int pass = 0; pass < 10; pass++) {
+			float[] xs = new float[treeNodes.size()];
+			for (int i = 0; i < treeNodes.size(); i++) xs[i] = treeNodes.get(i).x();
+
+			// Group node indices by Y row
+			Map<Integer, List<Integer>> byRow = new LinkedHashMap<>();
+			for (int i = 0; i < treeNodes.size(); i++) {
+				int row = Math.round(treeNodes.get(i).y() / rowH);
+				byRow.computeIfAbsent(row, k -> new ArrayList<>()).add(i);
+			}
+
+			boolean anyChanged = false;
+			// Push overlapping pairs apart within each row
+			for (List<Integer> rowNodes : byRow.values()) {
+				rowNodes.sort((a, b) -> Float.compare(xs[a], xs[b]));
+				for (int k = 1; k < rowNodes.size(); k++) {
+					int prev = rowNodes.get(k - 1);
+					int cur  = rowNodes.get(k);
+					float gap = xs[cur] - xs[prev];
+					if (gap < minSep) {
+						float push = (minSep - gap) / 2.0f;
+						xs[prev] -= push;
+						xs[cur]  += push;
+						anyChanged = true;
+					}
+				}
+			}
+
+			// Re-centre each result node over its (possibly shifted) children
+			for (int i = 0; i < steps; i++) {
+				int resIdx = instrResultNodeIdx[i];
+				if (resIdx < 0) continue;
+				float sumCx = 0; int count = 0;
+				for (Connector c : connectors) {
+					if (c.toIdx() == resIdx) {
+						sumCx += xs[c.fromIdx()] + NODE_SIZE / 2.0f;
+						count++;
+					}
+				}
+				if (count > 0) {
+					float newX = sumCx / count - NODE_SIZE / 2.0f;
+					if (Math.abs(newX - xs[resIdx]) > 0.01f) {
+						xs[resIdx] = newX;
+						anyChanged = true;
+					}
+				}
+			}
+
+			// Write updated X values back
+			List<TreeNode> updated = new ArrayList<>();
+			for (int i = 0; i < treeNodes.size(); i++) {
+				TreeNode n = treeNodes.get(i);
+				updated.add(new TreeNode(xs[i], n.y(), n.data(), n.isLeaf(), n.isFinal(), n.instrIdx()));
+			}
+			treeNodes = updated;
+
+			if (!anyChanged) break;
 		}
 
 		// ── Centre horizontally around 0, pad top ─────────────────────────────
@@ -806,9 +1046,10 @@ public class AeogOverlayScreen {
 		List<Text> lines = new ArrayList<>();
 
 		// Colors per spec
-		Style nameStyle   = Style.EMPTY.withColor(TextColor.fromRgb(0x54FCFC));
-		Style enchStyle   = Style.EMPTY.withColor(TextColor.fromRgb(0xA8A8A8));
-		Style infoStyle   = Style.EMPTY.withColor(TextColor.fromRgb(0x545454));
+		Style nameStyle  = Style.EMPTY.withColor(TextColor.fromRgb(0x54FCFC));
+		Style enchStyle  = Style.EMPTY.withColor(TextColor.fromRgb(0xA8A8A8));
+		Style curseStyle = Style.EMPTY.withColor(TextColor.fromRgb(0xFC5454));
+		Style infoStyle  = Style.EMPTY.withColor(TextColor.fromRgb(0x545454));
 
 		List<String[]> enchants = collectEnchantsfromNode(node);
 
@@ -822,11 +1063,11 @@ public class AeogOverlayScreen {
 		for (String[] e : enchants) {
 			int lvl;
 			try { lvl = Integer.parseInt(e[1]); } catch (NumberFormatException ex) { lvl = 1; }
-			// Only show Roman numeral if the enchant has more than 1 max level
 			EnchantData.EnchantDef def = EnchantData.ENCHANTS.get(e[0]);
 			boolean showLevel = def == null || def.levelMax() > 1;
 			String label = showLevel ? formatName(e[0]) + " " + toRoman(lvl) : formatName(e[0]);
-			lines.add(Text.literal(label).setStyle(enchStyle));
+			boolean isCurse = e[0].equals("binding_curse") || e[0].equals("vanishing_curse");
+			lines.add(Text.literal(label).setStyle(isCurse ? curseStyle : enchStyle));
 		}
 
 		if (node.instrIdx() >= 0) {
@@ -978,7 +1219,15 @@ public class AeogOverlayScreen {
 			return;
 		}
 		if (!selectedLevels.isEmpty() && inBounds(mx, my, px + CALC_X, py + CALC_Y, CALC_W, CALC_H)) {
-			sendCalculationRequest(); playClick(); return;
+			sendCalculationRequest();
+			if (selectedLevels.size() >= 10) {
+				treeNodes.clear();
+				connectors.clear();
+				loading = true;
+				loadingStartMs = System.currentTimeMillis();
+				phase = Phase.THREE;
+			}
+			playClick(); return;
 		}
 		// Scroll thumb drag
 		if (totalContentH > LIST_H) {
@@ -1014,8 +1263,11 @@ public class AeogOverlayScreen {
 						} else {
 							selectedLevels.put(enchant, lv);
 							enforceTrident(enchant);
-							for (String other : group) {
-								if (!other.equals(enchant)) selectedLevels.remove(other);
+							// Only deselect group members if incompatible grouping is active
+							if (!com.armaninyow.dibs.config.AeogConfig.allowIncompatible) {
+								for (String other : group) {
+									if (!other.equals(enchant)) selectedLevels.remove(other);
+								}
 							}
 						}
 						playClick();
@@ -1029,6 +1281,7 @@ public class AeogOverlayScreen {
 
 	private void clickPhase3(int px, int py, int mx, int my) {
 		if (inBounds(mx, my, px + 7, py + 5, BACK_W, BACK_H)) {
+			loading = false;
 			phase = Phase.TWO; playClick(); return;
 		}
 		int tax = px + P3_TREE_X, tay = py + P3_TREE_Y;
@@ -1059,39 +1312,163 @@ public class AeogOverlayScreen {
 		selectedLevels.clear(); scrollOffset = 0;
 		itemEnchants = EnchantData.enchantsForItem(selectedItem);
 		incompatGroups.clear(); groupVisible.clear();
-		Set<String> placed = new HashSet<>();
 
-		// For trident and book: force channeling → loyalty → riptide in that order,
-		// each as its own independent row (no prev/next grouping between them).
-		boolean needsTridentSplit = selectedItem != null
-			&& (selectedItem.equals("trident") || selectedItem.equals("book"));
-		if (needsTridentSplit) {
-			List<String> tridentOrder = List.of("channeling", "loyalty", "riptide");
-			for (String enchant : tridentOrder) {
-				if (itemEnchants.contains(enchant) && !placed.contains(enchant)) {
-					incompatGroups.add(new ArrayList<>(List.of(enchant)));
-					groupVisible.add(0);
-					placed.add(enchant);
+		// Setting 3: when allowIncompatible is on, preserve the original grouping ORDER
+		// (so incompatible enchants still appear next to each other) but each enchant
+		// gets its own independent row — no prev/next, no disabling.
+		if (com.armaninyow.dibs.config.AeogConfig.allowIncompatible) {
+			Set<String> placed = new HashSet<>();
+			// Use the same grouping logic to determine adjacency order,
+			// then add each enchant individually so they stay neighbours.
+			boolean needsTridentSplit = selectedItem != null
+				&& (selectedItem.equals("trident") || selectedItem.equals("book"));
+			if (needsTridentSplit) {
+				for (String enchant : List.of("channeling", "loyalty", "riptide")) {
+					if (itemEnchants.contains(enchant) && !placed.contains(enchant)) {
+						incompatGroups.add(new ArrayList<>(List.of(enchant)));
+						groupVisible.add(0);
+						placed.add(enchant);
+					}
+				}
+			}
+			for (String enchant : itemEnchants) {
+				if (placed.contains(enchant)) continue;
+				EnchantData.EnchantDef def = EnchantData.ENCHANTS.get(enchant);
+				// Add this enchant as its own row first
+				incompatGroups.add(new ArrayList<>(List.of(enchant)));
+				groupVisible.add(0);
+				placed.add(enchant);
+				// Then add each incompatible partner right after (also as own row)
+				for (String ic : def.incompatible()) {
+					if (!placed.contains(ic) && itemEnchants.contains(ic)) {
+						incompatGroups.add(new ArrayList<>(List.of(ic)));
+						groupVisible.add(0);
+						placed.add(ic);
+					}
+				}
+			}
+		} else {
+			Set<String> placed = new HashSet<>();
+
+			// For trident and book: force channeling → loyalty → riptide in that order
+			boolean needsTridentSplit = selectedItem != null
+				&& (selectedItem.equals("trident") || selectedItem.equals("book"));
+			if (needsTridentSplit) {
+				List<String> tridentOrder = List.of("channeling", "loyalty", "riptide");
+				for (String enchant : tridentOrder) {
+					if (itemEnchants.contains(enchant) && !placed.contains(enchant)) {
+						incompatGroups.add(new ArrayList<>(List.of(enchant)));
+						groupVisible.add(0);
+						placed.add(enchant);
+					}
+				}
+			}
+
+			// All other enchants — group mutually exclusive ones via prev/next
+			for (String enchant : itemEnchants) {
+				if (placed.contains(enchant)) continue;
+				EnchantData.EnchantDef def = EnchantData.ENCHANTS.get(enchant);
+				List<String> group = new ArrayList<>();
+				group.add(enchant); placed.add(enchant);
+				for (String ic : def.incompatible()) {
+					if (!placed.contains(ic) && itemEnchants.contains(ic)) {
+						group.add(ic); placed.add(ic);
+					}
+				}
+				incompatGroups.add(group); groupVisible.add(0);
+			}
+		}
+
+		// Setting 2: auto-fill levels after groups are built
+		autoFillLevels();
+	}
+
+	/** Setting 2: auto-select levels based on the configured mode. */
+	private void autoFillLevels() {
+		com.armaninyow.dibs.config.AeogConfig.AutoFillMode mode =
+			com.armaninyow.dibs.config.AeogConfig.autoFillMode;
+		if (mode == com.armaninyow.dibs.config.AeogConfig.AutoFillMode.OFF) return;
+
+		if (mode == com.armaninyow.dibs.config.AeogConfig.AutoFillMode.MAX_LEVELS) {
+			for (String enchant : itemEnchants) {
+				if (enchant.equals("binding_curse") || enchant.equals("vanishing_curse")) continue;
+				EnchantData.EnchantDef def = EnchantData.ENCHANTS.get(enchant);
+				selectedLevels.put(enchant, def.levelMax());
+			}
+		} else if (mode == com.armaninyow.dibs.config.AeogConfig.AutoFillMode.FROM_INVENTORY) {
+			MinecraftClient mc = MinecraftClient.getInstance();
+			if (mc.player == null) return;
+			PlayerInventory inv = mc.player.getInventory();
+			if (mc.world == null) return;
+			var reg = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
+			for (int i = 0; i < inv.size(); i++) {
+				ItemStack s = inv.getStack(i);
+				if (s.isEmpty() || !s.isOf(Items.ENCHANTED_BOOK)) continue;
+				var stored = s.get(DataComponentTypes.STORED_ENCHANTMENTS);
+				if (stored == null) continue;
+				for (String enchant : itemEnchants) {
+					if (enchant.equals("binding_curse") || enchant.equals("vanishing_curse")) continue;
+					String mcId = toMinecraftEnchantId(enchant);
+					var entry = reg.getEntry(Identifier.of("minecraft", mcId));
+					if (entry.isEmpty()) continue;
+					int lvl = stored.getLevel(entry.get());
+					if (lvl > 0) {
+						int cur = selectedLevels.getOrDefault(enchant, 0);
+						if (lvl > cur) selectedLevels.put(enchant, lvl);
+					}
 				}
 			}
 		}
 
-		// All other enchants — group mutually exclusive ones via prev/next
-		for (String enchant : itemEnchants) {
-			if (placed.contains(enchant)) continue;
-			EnchantData.EnchantDef def = EnchantData.ENCHANTS.get(enchant);
-			List<String> group = new ArrayList<>();
-			group.add(enchant); placed.add(enchant);
-			for (String ic : def.incompatible()) {
-				if (!placed.contains(ic) && itemEnchants.contains(ic)) {
-					group.add(ic); placed.add(ic);
+		// Enforce incompatibility groups — keep only highest-level enchant per group
+		if (!com.armaninyow.dibs.config.AeogConfig.allowIncompatible) {
+			for (int gi = 0; gi < incompatGroups.size(); gi++) {
+				List<String> group = incompatGroups.get(gi);
+				if (group.size() <= 1) continue;
+				String best = null; int bestLvl = 0;
+				for (String e : group) {
+					int lvl = selectedLevels.getOrDefault(e, 0);
+					if (lvl > bestLvl) { bestLvl = lvl; best = e; }
+				}
+				for (int j = 0; j < group.size(); j++) {
+					String e = group.get(j);
+					if (!e.equals(best)) selectedLevels.remove(e);
+					else if (best != null) groupVisible.set(gi, j);
 				}
 			}
-			incompatGroups.add(group); groupVisible.add(0);
 		}
 	}
 
+	/**
+	 * Setting 1: check if the anvil target slot has an item and auto-advance to Phase 2.
+	 * Called each render frame from render().
+	 */
+	public void tickAutoDetect(net.minecraft.item.ItemStack targetSlotStack) {
+		if (!com.armaninyow.dibs.config.AeogConfig.autoDetectItem) return;
+		if (phase != Phase.ONE) return;
+		if (targetSlotStack == null || targetSlotStack.isEmpty()) return;
+
+		// Map the item in the slot to our item ID
+		String detected = detectItemId(targetSlotStack);
+		if (detected == null) return;
+
+		selectedItem = detected;
+		buildPhase2Data();
+		phase = Phase.TWO;
+		playClick();
+	}
+
+	/** Maps a vanilla ItemStack to our internal item ID string, or null if not supported. */
+	private String detectItemId(ItemStack s) {
+		for (String id : EnchantData.PHASE1_ITEMS) {
+			if (id.equals("book")) continue; // book is selected manually
+			if (itemMatchesId(s, id)) return id;
+		}
+		return null;
+	}
+
 	private boolean isEnchantDisabledByTrident(String e) {
+		if (com.armaninyow.dibs.config.AeogConfig.allowIncompatible) return false;
 		boolean r = selectedLevels.containsKey("riptide");
 		boolean l = selectedLevels.containsKey("loyalty");
 		boolean c = selectedLevels.containsKey("channeling");
@@ -1101,6 +1478,7 @@ public class AeogOverlayScreen {
 	}
 
 	private void enforceTrident(String just) {
+		if (com.armaninyow.dibs.config.AeogConfig.allowIncompatible) return;
 		if (just.equals("riptide")) { selectedLevels.remove("loyalty"); selectedLevels.remove("channeling"); }
 		else if (just.equals("loyalty") || just.equals("channeling")) selectedLevels.remove("riptide");
 	}
@@ -1129,6 +1507,7 @@ public class AeogOverlayScreen {
 		instructions = payload.instructions();
 		treeOffX = 0; treeOffY = 0;
 		buildTreeLayout();
+		loading = false;
 		phase = Phase.THREE;
 	}
 

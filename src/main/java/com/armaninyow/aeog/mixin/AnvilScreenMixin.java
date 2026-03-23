@@ -57,6 +57,25 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 	@Unique private boolean aeog$shifted      = false; // tracks whether x has been shifted
 	@Unique private AeogOverlayScreen aeog$panel = null;
 
+	// ── init: restore panel state when anvil screen opens ────────────────────
+
+	@Inject(at = @At("TAIL"), method = "init")
+	private void aeog$onInit(CallbackInfo ci) {
+		if (!((Object)this instanceof AnvilScreen)) return;
+		if (AeogOverlayScreen.s_panelWasOpen) {
+			aeog$openPanel();
+		}
+	}
+
+	// ── removed: save state when anvil screen closes ──────────────────────────
+
+	@Inject(at = @At("HEAD"), method = "removed")
+	private void aeog$onRemoved(CallbackInfo ci) {
+		if (!((Object)this instanceof AnvilScreen)) return;
+		if (aeog$panel != null) aeog$panel.saveState();
+		// Don't change s_panelWasOpen here — preserve whatever it was last set to
+	}
+
 	// ── drawBackground: draw guide button ────────────────────────────────────
 
 	@Inject(at = @At("TAIL"), method = "drawBackground")
@@ -96,9 +115,27 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 	@Inject(at = @At("TAIL"), method = "render")
 	private void aeog$render(DrawContext ctx, int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		if (!((Object)this instanceof AnvilScreen)) return;
-		if (!aeog$panelOpen || aeog$panel == null) return;
 
 		HandledScreenAccessor acc = (HandledScreenAccessor)(Object)this;
+
+		// Setting 1: auto-detect item in anvil target slot — works whether panel is open or not
+		net.minecraft.item.ItemStack targetStack = net.minecraft.item.ItemStack.EMPTY;
+		if (((net.minecraft.client.gui.screen.ingame.HandledScreen<?>)(Object)this)
+				.getScreenHandler() instanceof net.minecraft.screen.ForgingScreenHandler fsh) {
+			targetStack = fsh.getSlot(0).getStack();
+		}
+
+		// If panel is closed but auto-detect fires, open it first
+		if (!aeog$panelOpen && com.armaninyow.dibs.config.AeogConfig.autoDetectItem
+				&& !targetStack.isEmpty()) {
+			aeog$openPanel();
+		}
+
+		if (!aeog$panelOpen || aeog$panel == null) return;
+
+		// Tick auto-detect
+		aeog$panel.tickAutoDetect(targetStack);
+
 		aeog$panel.setJustOpened(aeog$justOpened);
 		aeog$panel.render(ctx, acc.aeog$getX(), acc.aeog$getY(), mouseX, mouseY,
 			MinecraftClient.getInstance().textRenderer);
@@ -112,11 +149,14 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 		aeog$panelOpen  = true;
 		aeog$justOpened = true;
 		aeog$panel      = new AeogOverlayScreen();
+		AeogOverlayScreen.s_panelWasOpen = true;
 		applyShift(CENTRE_SHIFT);
 	}
 
 	@Unique private void aeog$closePanel() {
 		if (!aeog$panelOpen) return;
+		if (aeog$panel != null) aeog$panel.saveState();
+		AeogOverlayScreen.s_panelWasOpen = false;
 		aeog$panelOpen = false;
 		aeog$panel     = null;
 		applyShift(-CENTRE_SHIFT);
@@ -139,7 +179,12 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 	// ── AeogPanelHost ─────────────────────────────────────────────────────────
 
 	@Override public void aeog$openOverlay()  { aeog$openPanel(); }
-	@Override public void aeog$onOverlayClosed() { aeog$closePanel(); }
+	@Override public void aeog$onOverlayClosed() {
+		if (aeog$panel != null) aeog$panel.saveState();
+		aeog$panelOpen = false;
+		aeog$panel     = null;
+		applyShift(-CENTRE_SHIFT);
+	}
 	@Override public void aeog$receiveEngineResult(AeogPackets.EngineResultPayload payload) {
 		if (aeog$panel != null) aeog$panel.receiveEngineResult(payload);
 	}
