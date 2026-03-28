@@ -3,7 +3,8 @@ package com.armaninyow.aeog.mixin;
 import com.armaninyow.aeog.AnvilEnchantmentOrderingGuide;
 import com.armaninyow.aeog.client.screen.AeogOverlayScreen;
 import com.armaninyow.aeog.client.screen.AeogPanelHost;
-import com.armaninyow.aeog.network.AeogPackets;
+import com.armaninyow.aeog.engine.MergeInstruction;
+import java.util.List;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
@@ -185,8 +186,8 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 		aeog$panel     = null;
 		applyShift(-CENTRE_SHIFT);
 	}
-	@Override public void aeog$receiveEngineResult(AeogPackets.EngineResultPayload payload) {
-		if (aeog$panel != null) aeog$panel.receiveEngineResult(payload);
+	@Override public void aeog$receiveEngineResult(java.util.List<com.armaninyow.aeog.engine.MergeInstruction> result) {
+		if (aeog$panel != null) aeog$panel.receiveEngineResult(result);
 	}
 
 	@Unique private void playAeogClick() {

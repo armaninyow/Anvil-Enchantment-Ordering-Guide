@@ -1,6 +1,7 @@
 package com.armaninyow.aeog.client.screen;
 
-import com.armaninyow.aeog.network.AeogPackets;
+import com.armaninyow.aeog.engine.MergeInstruction;
+import java.util.List;
 
 /**
  * Implemented by {@link com.armaninyow.aeog.mixin.AnvilScreenMixin} (which targets ForgingScreen).
@@ -14,6 +15,6 @@ public interface AeogPanelHost {
 	/** Hides the AEOG panel and resets the button texture. */
 	void aeog$onOverlayClosed();
 
-	/** Forwards an S2C engine result to the open panel. */
-	void aeog$receiveEngineResult(AeogPackets.EngineResultPayload payload);
+	/** Forwards engine result to the open panel. */
+	void aeog$receiveEngineResult(List<MergeInstruction> result);
 }

@@ -3,11 +3,10 @@ package com.armaninyow.aeog.client.screen;
 import com.armaninyow.aeog.AnvilEnchantmentOrderingGuide;
 import com.armaninyow.aeog.engine.EnchantData;
 import com.armaninyow.aeog.engine.MergeInstruction;
-import com.armaninyow.aeog.network.AeogPackets;
+import com.armaninyow.aeog.engine.OptimizationEngine;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gl.RenderPipelines;
@@ -79,6 +78,9 @@ public class AeogOverlayScreen {
 	private static final Identifier FRAME_PROG_U  = id(TEX + "progress_frame_unobtained.png");
 	private static final Identifier FRAME_FINAL_O = id(TEX + "final_frame_obtained.png");
 	private static final Identifier FRAME_FINAL_U = id(TEX + "final_frame_unobtained.png");
+	private static final Identifier P3_CONTAINER_2   = id(TEX + "phase_3_container_2.png");
+	private static final Identifier LIST_FRAME_O  = id(TEX + "list_frame_obtained.png");
+	private static final Identifier LIST_FRAME_U  = id(TEX + "list_frame_unobtained.png");
 
 	/** Custom item icons — 16×16 PNGs from textures/items/ */
 	private static final Map<String, Identifier> ITEM_ICONS = new LinkedHashMap<>();
@@ -143,6 +145,19 @@ public class AeogOverlayScreen {
 	private static final int P3_TREE_X = 8,   P3_TREE_Y = 18;
 	private static final int P3_TREE_W = 177,  P3_TREE_H = 139;
 
+	// Phase 3 list view — list area x=7 y=17 → x=168 y=140  (w=161 h=123)
+	private static final int P3L_LIST_X = 7,  P3L_LIST_Y = 17;
+	private static final int P3L_LIST_W = 161, P3L_LIST_H = 123;
+	// Total cost bar: x=7 y=141 → x=168 y=158
+	private static final int P3L_TOTAL_X = 7,  P3L_TOTAL_Y = 141;
+	private static final int P3L_TOTAL_W = 161, P3L_TOTAL_H = 17;
+	// List frame size
+	private static final int LIST_FRAME_SIZE = 16;
+	// Colors
+	private static final int COLOR_ITEM_TEXT  = 0xFF535353;
+	private static final int COLOR_COST_TEXT  = 0xFF6b6b6b;
+	private static final int COLOR_TOTAL_TEXT = 0xFF3C3C3C;
+
 	// Tree node dimensions: 26×26 frames
 	private static final int NODE_SIZE = 26;
 	private static final int NODE_ICON = 16;
@@ -171,6 +186,12 @@ public class AeogOverlayScreen {
 	private int scrollDragStartOffset = 0;
 
 	// Phase 3
+	private int   listScrollOffset = 0;
+	private int   listTotalH       = 0;
+	private boolean listScrollDragging    = false;
+	private int   listScrollDragStartY    = 0;
+	private int   listScrollDragStartOff  = 0;
+
 	private List<MergeInstruction> instructions = new ArrayList<>();
 	private float treeOffX = 0, treeOffY = 0;
 	private boolean loading = false;
@@ -190,6 +211,7 @@ public class AeogOverlayScreen {
 	private static int           s_scrollOffset  = 0;
 	private static List<MergeInstruction> s_instructions = new ArrayList<>();
 	private static float         s_treeOffX      = 0, s_treeOffY = 0;
+	private static int           s_listScrollOffset = 0;
 	public  static boolean       s_panelWasOpen  = false;
 
 	/** Save current instance state to static fields before the panel is destroyed. */
@@ -207,6 +229,7 @@ public class AeogOverlayScreen {
 		s_instructions  = new ArrayList<>(instructions);
 		s_treeOffX      = treeOffX;
 		s_treeOffY      = treeOffY;
+		s_listScrollOffset = listScrollOffset;
 	}
 
 	/** Restore state from static fields into the new instance. */
@@ -224,6 +247,7 @@ public class AeogOverlayScreen {
 		instructions  = new ArrayList<>(s_instructions);
 		treeOffX      = s_treeOffX;
 		treeOffY      = s_treeOffY;
+		listScrollOffset = s_listScrollOffset;
 		// Rebuild derived state
 		if (phase == Phase.THREE && !instructions.isEmpty()) buildTreeLayout();
 	}
@@ -449,6 +473,15 @@ public class AeogOverlayScreen {
 
 	private void renderPhaseThree(DrawContext ctx, int px, int py,
 	                               int mx, int my, TextRenderer tr) {
+		if (com.armaninyow.dibs.config.AeogConfig.listViewPhase3) {
+			renderPhaseThreeList(ctx, px, py, mx, my, tr);
+		} else {
+			renderPhaseThreeTree(ctx, px, py, mx, my, tr);
+		}
+	}
+
+	private void renderPhaseThreeTree(DrawContext ctx, int px, int py,
+	                                   int mx, int my, TextRenderer tr) {
 		int treeAbsX = px + P3_TREE_X;
 		int treeAbsY = py + P3_TREE_Y;
 
@@ -489,6 +522,253 @@ public class AeogOverlayScreen {
 		if (loading) {
 			renderLoadingOverlay(ctx, px, py, tr);
 		}
+	}
+
+	// ── Phase 3 list view ─────────────────────────────────────────────────────
+
+	private void renderPhaseThreeList(DrawContext ctx, int px, int py,
+	                                   int mx, int my, TextRenderer tr) {
+		// Container
+		ctx.drawTexture(PIPE, P3_CONTAINER_2, px, py, 0f, 0f, P_W, P_H, P_W, P_H);
+		renderBack(ctx, px, py, mx, my);
+
+		if (loading) {
+			renderListLoadingOverlay(ctx, px, py, tr);
+			return;
+		}
+
+		int listAbsX = px + P3L_LIST_X;
+		int listAbsY = py + P3L_LIST_Y;
+
+		// Build row layout (needed for scroll height and rendering)
+		List<ListRow> rows = buildListRows(tr);
+		listTotalH = rows.stream().mapToInt(r -> r.height).sum();
+		int maxScroll = Math.max(0, listTotalH - P3L_LIST_H);
+		listScrollOffset = Math.max(0, Math.min(maxScroll, listScrollOffset));
+
+		// Scrollable content — scissor clips text/textures, visibility check skips drawItem
+		int clipTop    = listAbsY;
+		int clipBottom = listAbsY + P3L_LIST_H;
+		ctx.enableScissor(listAbsX, clipTop, listAbsX + P3L_LIST_W, clipBottom);
+		renderListRows(ctx, tr, rows, listAbsX, listAbsY - listScrollOffset, clipTop, clipBottom);
+		ctx.disableScissor();
+
+		// Scroll bar
+		renderListScrollBar(ctx, px, py, maxScroll);
+
+		// Pinned total cost bar
+		int totalCost = instructions.stream().mapToInt(MergeInstruction::mergeCost).sum();
+		String totalStr = "Total cost: " + totalCost + " levels";
+		int totalStrW = tr.getWidth(totalStr);
+		int totalBarMidX = px + P3L_TOTAL_X + P3L_TOTAL_W / 2;
+		int totalBarMidY = py + P3L_TOTAL_Y + P3L_TOTAL_H / 2 - 1;
+		ctx.drawText(tr, Text.literal(totalStr), totalBarMidX - totalStrW / 2, totalBarMidY, COLOR_TOTAL_TEXT, false);
+	}
+
+	private void renderListLoadingOverlay(DrawContext ctx, int px, int py, TextRenderer tr) {
+		// Center inside the scrollable list area: x=7 y=17 w=161 h=123
+		int cx = px + P3L_LIST_X + P3L_LIST_W / 2;
+		int cy = py + P3L_LIST_Y + P3L_LIST_H / 2;
+
+		float progress = (float)(System.currentTimeMillis() - loadingStartMs) / expectedMs();
+		progress = Math.min(progress, 0.9f);
+
+		String line1 = "Calculating...";
+		String line2 = "Please keep the anvil open.";
+		int line1W = tr.getWidth(line1);
+		int line2W = tr.getWidth(line2);
+
+		int totalH = 8 + 2 + 8 + 4 + LOADING_BAR_H;
+		int line1Y = cy - totalH / 2;
+		int line2Y = line1Y + 8 + 2;
+		int barY   = line2Y + 8 + 4;
+		int barX   = cx - LOADING_BAR_W / 2;
+
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line1),
+			cx - line1W / 2 + 1, line1Y + 1, 0xFF3F3F3F, false);
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line1),
+			cx - line1W / 2, line1Y, 0xFFFFFFFF, false);
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line2),
+			cx - line2W / 2 + 1, line2Y + 1, 0xFF3F3F3F, false);
+		ctx.drawText(tr, net.minecraft.text.Text.literal(line2),
+			cx - line2W / 2, line2Y, 0xFFFFFFFF, false);
+		ctx.fill(barX, barY, barX + LOADING_BAR_W, barY + LOADING_BAR_H, 0xFF000000);
+		int fillW = (int)(LOADING_BAR_W * progress);
+		if (fillW > 0)
+			ctx.fill(barX, barY, barX + fillW, barY + LOADING_BAR_H, 0xFF00FF00);
+	}
+
+	/** One rendered "row" in the list view. */
+	private record ListRow(int stepNumber, MergeInstruction instr, int height,
+	                       List<String> enchLines, // wrapped enchant description lines (below icons)
+	                       List<String> costLines, // wrapped cost/PWP lines
+	                       boolean leftObtained, boolean rightObtained) {}
+
+	private List<ListRow> buildListRows(TextRenderer tr) {
+		List<ListRow> rows = new ArrayList<>();
+		int lineH = tr.fontHeight; // no gap between text lines
+		int iconRowH = Math.max(LIST_FRAME_SIZE, tr.fontHeight);
+		// Icon row is always: [frame16][leftIcon16][" + "][rightIcon16]
+		// ALL enchant text goes below the icon row, indented by LIST_FRAME_SIZE.
+		// This avoids any overflow from text trying to fit beside the icons.
+		int contW = P3L_LIST_W - LIST_FRAME_SIZE;
+		for (int i = 0; i < instructions.size(); i++) {
+			MergeInstruction instr = instructions.get(i);
+			String leftEnch  = enchantSummary(instr.left());
+			String rightEnch = enchantSummary(instr.right());
+			String enchLine;
+			if (leftEnch.isEmpty() && rightEnch.isEmpty()) {
+				enchLine = "";
+			} else if (leftEnch.isEmpty()) {
+				enchLine = "(" + rightEnch + ")";
+			} else if (rightEnch.isEmpty()) {
+				enchLine = "(" + leftEnch + ")";
+			} else {
+				enchLine = "(" + leftEnch + ") + (" + rightEnch + ")";
+			}
+			List<String> enchLines = enchLine.isEmpty()
+				? new ArrayList<>()
+				: wrapText(tr, enchLine, contW, contW);
+			String costStr = "Cost: " + instr.mergeCost() + " levels, PWP: " + instr.priorWorkPenalty() + " levels";
+			List<String> costLines = wrapText(tr, costStr, contW, contW);
+			int rowH = iconRowH + 1 + lineH * enchLines.size() + lineH * costLines.size() + 3;
+			boolean lo = findMatchingStack(instr.left(), null) != null;
+			boolean ro = findMatchingStack(instr.right(), null) != null;
+			rows.add(new ListRow(i + 1, instr, rowH, enchLines, costLines, lo, ro));
+		}
+		return rows;
+	}
+
+	/** Wraps text into lines. firstLineWidth is the usable width for the first segment,
+	 *  contWidth for continuation lines. Returns list of segments (never empty). */
+	private List<String> wrapText(TextRenderer tr, String text, int firstLineWidth, int contWidth) {
+		List<String> result = new ArrayList<>();
+		if (text.isEmpty()) { result.add(""); return result; }
+		// Guard: if available width is too small to fit even one character, treat as contWidth
+		if (firstLineWidth < tr.getWidth("W")) firstLineWidth = contWidth;
+		String remaining = text;
+		int availW = firstLineWidth;
+		while (!remaining.isEmpty()) {
+			if (tr.getWidth(remaining) <= availW) {
+				result.add(remaining);
+				break;
+			}
+			// Walk down from full length until the prefix strictly fits
+			// Start at length-1 since we already know the full string doesn't fit
+			int cut = remaining.length() - 1;
+			while (cut > 0 && tr.getWidth(remaining.substring(0, cut)) > availW) cut--;
+			// cut is now the longest prefix that fits, but may still be 0 if nothing fits
+			// Try to break at the last space at or before cut
+			int space = (cut > 0) ? remaining.lastIndexOf(' ', cut - 1) : -1;
+			if (space >= 0) {
+				result.add(remaining.substring(0, space).stripTrailing());
+				remaining = remaining.substring(space).stripLeading();
+			} else {
+				// No space — hard cut; ensure at least 1 char to avoid infinite loop
+				int hardCut = Math.max(1, cut);
+				result.add(remaining.substring(0, hardCut));
+				remaining = remaining.substring(hardCut);
+			}
+			availW = contWidth;
+		}
+		if (result.isEmpty()) result.add("");
+		return result;
+	}
+
+	/** Returns a comma-separated enchant summary for a NodeItem, e.g. "Fortune III, Efficiency V". */
+	private String enchantSummary(MergeInstruction.NodeItem node) {
+		List<String[]> enchants = node.enchants();
+		if (enchants.isEmpty()) return "";
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < enchants.size(); i++) {
+			if (i > 0) sb.append(", ");
+			String[] e = enchants.get(i);
+			int lvl;
+			try { lvl = Integer.parseInt(e[1]); } catch (NumberFormatException ex) { lvl = 1; }
+			EnchantData.EnchantDef def = EnchantData.ENCHANTS.get(e[0]);
+			boolean showLevel = def == null || def.levelMax() > 1;
+			sb.append(formatName(e[0]));
+			if (showLevel) sb.append(" ").append(toRoman(lvl));
+		}
+		return sb.toString();
+	}
+
+	private void renderListRows(DrawContext ctx, TextRenderer tr,
+	                             List<ListRow> rows, int absX, int startY,
+	                             int clipTop, int clipBottom) {
+		int lineH = tr.fontHeight; // no gap between text lines
+		int iconRowH = Math.max(LIST_FRAME_SIZE, tr.fontHeight);
+		int plusW = tr.getWidth(" + ");
+		int y = startY;
+		for (ListRow row : rows) {
+			int rowBottom = y + row.height;
+			if (rowBottom < clipTop) { y = rowBottom; continue; }
+			if (y >= clipBottom)     { break; }
+
+			// ── Icon row ──────────────────────────────────────────────────────
+			boolean iconRowVisible = y < clipBottom && (y + iconRowH) > clipTop;
+			if (iconRowVisible) {
+				int x = absX;
+				int textY = y + iconRowH / 2 - tr.fontHeight / 2;
+				boolean obtained = row.leftObtained && row.rightObtained;
+				ctx.drawTexture(PIPE, obtained ? LIST_FRAME_O : LIST_FRAME_U,
+					x, y, 0f, 0f, LIST_FRAME_SIZE, LIST_FRAME_SIZE, LIST_FRAME_SIZE, LIST_FRAME_SIZE);
+				String numStr = String.valueOf(row.stepNumber);
+				int numW = tr.getWidth(numStr);
+				ctx.drawText(tr, Text.literal(numStr),
+					x + LIST_FRAME_SIZE / 2 - numW / 2, y + LIST_FRAME_SIZE / 2 - tr.fontHeight / 2,
+					obtained ? 0xFFFFFFFF : 0xFF6b6b6b, false);
+				x += LIST_FRAME_SIZE;
+				if (y >= clipTop && (y + LIST_FRAME_SIZE) <= clipBottom)
+					drawListIcon(ctx, tr, row.instr.left(), row.leftObtained, x, y);
+				x += LIST_FRAME_SIZE;
+				ctx.drawText(tr, Text.literal(" + "), x, textY, COLOR_ITEM_TEXT, false);
+				x += plusW;
+				if (y >= clipTop && (y + LIST_FRAME_SIZE) <= clipBottom)
+					drawListIcon(ctx, tr, row.instr.right(), row.rightObtained, x, y);
+			}
+
+			y += iconRowH + 1; // past icon row + 1px gap
+
+			// ── Enchant description lines (indented, below icons) ─────────────
+			for (String seg : row.enchLines) {
+				if (y >= clipTop && y < clipBottom && !seg.isEmpty())
+					ctx.drawText(tr, Text.literal(seg), absX + LIST_FRAME_SIZE, y, COLOR_ITEM_TEXT, false);
+				y += lineH;
+			}
+
+			// ── Cost/PWP lines (indented) ─────────────────────────────────────
+			for (String seg : row.costLines) {
+				if (y >= clipTop && y < clipBottom && !seg.isEmpty())
+					ctx.drawText(tr, Text.literal(seg), absX + LIST_FRAME_SIZE, y, COLOR_COST_TEXT, false);
+				y += lineH;
+			}
+
+			y += 3; // gap between rows
+		}
+	}
+
+	/** Draws a 16x16 item icon in list view: vanilla item if obtained, mod PNG if not. */
+	private void drawListIcon(DrawContext ctx, TextRenderer tr,
+	                           MergeInstruction.NodeItem node, boolean obtained, int x, int y) {
+		if (obtained) {
+			ItemStack match = findMatchingStack(node, null);
+			if (match != null && !match.isEmpty()) {
+				ctx.drawItem(match, x, y);
+				return;
+			}
+		}
+		drawIcon(ctx, node.id(), x, y);
+	}
+
+	private void renderListScrollBar(DrawContext ctx, int px, int py, int maxScroll) {
+		if (maxScroll <= 0) return;
+		int trackAbsX = px + SCROLL_X;
+		int trackAbsY = py + SCROLL_Y;
+		float frac    = (float) listScrollOffset / Math.max(1, maxScroll);
+		int thumbY    = trackAbsY + (int)(frac * (SCROLL_TRACK_H - SCROLLER_H));
+		ctx.drawTexture(PIPE, SCROLLER,
+			trackAbsX, thumbY, 0f, 0f, SCROLLER_W, SCROLLER_H, SCROLLER_W, SCROLLER_H);
 	}
 
 	private static final int LOADING_BAR_W = 150;
@@ -1156,7 +1436,7 @@ public class AeogOverlayScreen {
 			org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
 
 		if (down && !wasLeftDown && !justOpened) handleClick(px, py, mx, my);
-		if (!down) { treeDragging = false; scrollDragging = false; }
+		if (!down) { treeDragging = false; scrollDragging = false; listScrollDragging = false; }
 		if (down && wasLeftDown) {
 			if (treeDragging) {
 				treeOffX = treeDragOffX + (mx - treeDragStartX);
@@ -1172,6 +1452,13 @@ public class AeogOverlayScreen {
 				int snapped   = Math.round((float) raw / ROW_H) * ROW_H;
 				scrollOffset  = Math.max(0, Math.min(maxScroll, snapped));
 			}
+			if (listScrollDragging && phase == Phase.THREE
+					&& com.armaninyow.dibs.config.AeogConfig.listViewPhase3 && listTotalH > P3L_LIST_H) {
+				int maxScroll = listTotalH - P3L_LIST_H;
+				float frac    = (float)(my - listScrollDragStartY) / Math.max(1, SCROLL_TRACK_H - SCROLLER_H);
+				listScrollOffset = Math.max(0, Math.min(maxScroll,
+					listScrollDragStartOff + (int)(frac * maxScroll)));
+			}
 		}
 		wasLeftDown = down;
 
@@ -1181,6 +1468,10 @@ public class AeogOverlayScreen {
 			int maxScroll = Math.max(0, totalContentH - LIST_H);
 			int delta     = -(int)Math.signum(scroll) * ROW_H;
 			scrollOffset  = Math.max(0, Math.min(maxScroll, scrollOffset + delta));
+		}
+		if (scroll != 0 && phase == Phase.THREE && com.armaninyow.dibs.config.AeogConfig.listViewPhase3) {
+			int maxScroll = Math.max(0, listTotalH - P3L_LIST_H);
+			listScrollOffset = Math.max(0, Math.min(maxScroll, listScrollOffset - (int)Math.signum(scroll) * 7));
 		}
 	}
 
@@ -1219,14 +1510,12 @@ public class AeogOverlayScreen {
 			return;
 		}
 		if (!selectedLevels.isEmpty() && inBounds(mx, my, px + CALC_X, py + CALC_Y, CALC_W, CALC_H)) {
+			treeNodes.clear();
+			connectors.clear();
+			loading = true;
+			loadingStartMs = System.currentTimeMillis();
+			phase = Phase.THREE;
 			sendCalculationRequest();
-			if (selectedLevels.size() >= 10) {
-				treeNodes.clear();
-				connectors.clear();
-				loading = true;
-				loadingStartMs = System.currentTimeMillis();
-				phase = Phase.THREE;
-			}
 			playClick(); return;
 		}
 		// Scroll thumb drag
@@ -1283,6 +1572,21 @@ public class AeogOverlayScreen {
 		if (inBounds(mx, my, px + 7, py + 5, BACK_W, BACK_H)) {
 			loading = false;
 			phase = Phase.TWO; playClick(); return;
+		}
+		if (com.armaninyow.dibs.config.AeogConfig.listViewPhase3) {
+			// List view: scroll thumb drag
+			if (listTotalH > P3L_LIST_H) {
+				int tAx = px + SCROLL_X, tAy = py + SCROLL_Y;
+				int maxScroll = listTotalH - P3L_LIST_H;
+				float frac = (float) listScrollOffset / Math.max(1, maxScroll);
+				int thumbY = tAy + (int)(frac * (SCROLL_TRACK_H - SCROLLER_H));
+				if (inBounds(mx, my, tAx, thumbY, SCROLLER_W, SCROLLER_H)) {
+					listScrollDragging = true;
+					listScrollDragStartY = my;
+					listScrollDragStartOff = listScrollOffset;
+				}
+			}
+			return;
 		}
 		int tax = px + P3_TREE_X, tay = py + P3_TREE_Y;
 		if (inBounds(mx, my, tax, tay, P3_TREE_W, P3_TREE_H)) {
@@ -1487,6 +1791,8 @@ public class AeogOverlayScreen {
 	// NETWORK
 	// ─────────────────────────────────────────────────────────────────────────
 
+	private static final OptimizationEngine CLIENT_ENGINE = new OptimizationEngine();
+
 	private void sendCalculationRequest() {
 		if (selectedItem == null) return;
 		int idC = 0;
@@ -1498,13 +1804,25 @@ public class AeogOverlayScreen {
 			enchants.add(new int[]{ids.get(e), selectedLevels.get(e)});
 		}
 		if (enchants.isEmpty()) return;
-		ClientPlayNetworking.send(
-			new AeogPackets.CalcRequestPayload(selectedItem, enchants, modeLevels));
+		OptimizationEngine.Mode mode = modeLevels
+			? OptimizationEngine.Mode.LEVELS
+			: OptimizationEngine.Mode.WORK;
+		final String itemSnapshot = selectedItem;
+		final List<int[]> enchantsSnapshot = enchants;
+		final OptimizationEngine.Mode modeSnapshot = mode;
+		Thread.ofVirtual().name("aeog-engine").start(() -> {
+			try {
+				List<MergeInstruction> result = CLIENT_ENGINE.process(itemSnapshot, enchantsSnapshot, modeSnapshot);
+				net.minecraft.client.MinecraftClient.getInstance().execute(() -> receiveEngineResult(result));
+			} catch (Exception ex) {
+				AnvilEnchantmentOrderingGuide.LOGGER.error("[AEOG] Engine error: {}", ex.getMessage(), ex);
+				net.minecraft.client.MinecraftClient.getInstance().execute(() -> loading = false);
+			}
+		});
 	}
 
-
-	public void receiveEngineResult(AeogPackets.EngineResultPayload payload) {
-		instructions = payload.instructions();
+	public void receiveEngineResult(List<MergeInstruction> result) {
+		instructions = result;
 		treeOffX = 0; treeOffY = 0;
 		buildTreeLayout();
 		loading = false;

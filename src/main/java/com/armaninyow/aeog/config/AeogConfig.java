@@ -22,6 +22,9 @@ public class AeogConfig {
 	// ── Setting 3: Allow incompatible enchantments ────────────────────────────
 	public static boolean allowIncompatible = false;
 
+	// ── Setting 4: Phase 3 list view ─────────────────────────────────────────
+	public static boolean listViewPhase3 = false;
+
 	// ── Persistence ───────────────────────────────────────────────────────────
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -33,6 +36,7 @@ public class AeogConfig {
 		boolean autoDetectItem   = false;
 		String  autoFillMode     = "OFF";
 		boolean allowIncompatible = false;
+		boolean listViewPhase3   = false;
 	}
 
 	public static void load() {
@@ -43,6 +47,7 @@ public class AeogConfig {
 			if (d == null) return;
 			autoDetectItem    = d.autoDetectItem;
 			allowIncompatible = d.allowIncompatible;
+			listViewPhase3    = d.listViewPhase3;
 			try { autoFillMode = AutoFillMode.valueOf(d.autoFillMode); }
 			catch (IllegalArgumentException ignored) { autoFillMode = AutoFillMode.OFF; }
 		} catch (Exception e) {
@@ -56,6 +61,7 @@ public class AeogConfig {
 			d.autoDetectItem    = autoDetectItem;
 			d.autoFillMode      = autoFillMode.name();
 			d.allowIncompatible = allowIncompatible;
+			d.listViewPhase3    = listViewPhase3;
 			GSON.toJson(d, w);
 		} catch (Exception ignored) {}
 	}

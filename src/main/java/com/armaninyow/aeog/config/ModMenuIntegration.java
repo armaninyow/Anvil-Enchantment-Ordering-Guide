@@ -13,6 +13,8 @@ import java.util.Optional;
 
 public class ModMenuIntegration implements ModMenuApi {
 
+	public enum Phase3ViewMode { TREE, LIST }
+
 	@Override
 	public ConfigScreenFactory<?> getModConfigScreenFactory() {
 		return parent -> buildScreen(parent);
@@ -57,6 +59,17 @@ public class ModMenuIntegration implements ModMenuApi {
 			.setDefaultValue(false)
 			.setTooltip(Text.translatable("config.aeog.allowIncompatible.tooltip"))
 			.setSaveConsumer(val -> AeogConfig.allowIncompatible = val)
+			.build());
+
+		// ── Setting 4: Phase 3 view mode ─────────────────────────────────────
+		cat.addEntry(eb.startEnumSelector(
+				Text.translatable("config.aeog.phase3ViewMode"),
+				Phase3ViewMode.class,
+				AeogConfig.listViewPhase3 ? Phase3ViewMode.LIST : Phase3ViewMode.TREE)
+			.setDefaultValue(Phase3ViewMode.TREE)
+			.setTooltip(Text.translatable("config.aeog.phase3ViewMode.tooltip"))
+			.setEnumNameProvider(e -> Text.translatable("config.aeog.phase3ViewMode." + e.name().toLowerCase()))
+			.setSaveConsumer(val -> AeogConfig.listViewPhase3 = (val == Phase3ViewMode.LIST))
 			.build());
 
 		return builder.build();
