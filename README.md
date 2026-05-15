@@ -23,6 +23,15 @@ If you encounter bugs or wish to contribute:
 <details>
   <summary></summary>
    
+### 2.1.0—1.21.x
+* Added support for modded items in Phase 1
+* Added support for modded enchantments in Phase 2 and 3
+* Added settings to toggle the mod button visibility in Phase 1 and Phase 2
+* Added support for copper tools, weapons, and armor for phases 2 and 3 (1.21.9+)
+* Fixed obtained item frames in Phase 3 to show the actual item name instead of its generic category name
+* Split 1.21.5-1.21.11 into two separate version ranges to account for API differences across minor versions
+* Merged 1.21.2-1.21.5 into a single version range due to shared rendering API compatibility
+* Fixed a crash on 1.21.5 caused by a rendering API that was not available until 1.21.6
 ### 2.0.0—1.21.x
 * Added multi-version support covering Minecraft 1.21 through 1.21.11
 * Replaced the custom click sound with a built-in Minecraft sound
