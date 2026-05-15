@@ -19,5 +19,11 @@
 	"config.aeog.phase3ViewMode": "Phase 3 View Mode",
 	"config.aeog.phase3ViewMode.tooltip": "Choose how merge steps are displayed in Phase 3.",
 	"config.aeog.phase3ViewMode.tree": "Tree View",
-	"config.aeog.phase3ViewMode.list": "List View"
+	"config.aeog.phase3ViewMode.list": "List View",
+
+	"config.aeog.showModButtonPhase1": "Show Mod Button in Phase 1",
+	"config.aeog.showModButtonPhase1.tooltip": "When enabled, a button appears in Phase 1\nto switch between vanilla and modded items.",
+
+	"config.aeog.showModButtonPhase2": "Show Mod Button in Phase 2",
+	"config.aeog.showModButtonPhase2.tooltip": "When enabled, a button appears in Phase 2\nto show or hide modded enchantments."
 }

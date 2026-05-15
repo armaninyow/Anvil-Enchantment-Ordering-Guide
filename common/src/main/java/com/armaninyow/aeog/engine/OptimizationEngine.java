@@ -34,6 +34,26 @@ public final class OptimizationEngine {
 		}
 	}
 
+	/**
+	 * Registers a modded enchant with a given weight so the engine can process it.
+	 * Safe to call multiple times for the same key (idempotent).
+	 */
+	public int registerExtraEnchant(String key, int weight) {
+		if (idList.containsKey(key)) return idList.get(key);
+		int id = enchant2Weight.size();
+		idList.put(key, id);
+		enchant2Weight.add(weight);
+		return id;
+	}
+
+	/** Returns the registered weight for an enchant key, or 1 if not found. */
+	public int getWeightFor(String key) {
+		Integer id = idList.get(key);
+		if (id == null || id >= enchant2Weight.size()) return 1;
+		int w = enchant2Weight.get(id);
+		return w > 0 ? w : 1;
+	}
+
 	// ── Public API ───────────────────────────────────────────────────────────
 
 	/**

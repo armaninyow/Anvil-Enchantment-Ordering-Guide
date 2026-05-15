@@ -25,6 +25,12 @@ public class AeogConfig {
 	// ── Setting 4: Phase 3 list view ─────────────────────────────────────────
 	public static boolean listViewPhase3 = false;
 
+	// ── Setting 5: Show mod button in Phase 1 ────────────────────────────────
+	public static boolean showModButtonPhase1 = false;
+
+	// ── Setting 6: Show mod button in Phase 2 ────────────────────────────────
+	public static boolean showModButtonPhase2 = false;
+
 	// ── Persistence ───────────────────────────────────────────────────────────
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -33,10 +39,12 @@ public class AeogConfig {
 
 	/** Data class mirroring the static fields for JSON serialization. */
 	private static class Data {
-		boolean autoDetectItem   = false;
-		String  autoFillMode     = "OFF";
+		boolean autoDetectItem    = false;
+		String  autoFillMode      = "OFF";
 		boolean allowIncompatible = false;
-		boolean listViewPhase3   = false;
+		boolean listViewPhase3    = false;
+		boolean showModButtonPhase1 = false;
+		boolean showModButtonPhase2 = false;
 	}
 
 	public static void load() {
@@ -45,9 +53,11 @@ public class AeogConfig {
 		try (Reader r = new FileReader(file)) {
 			Data d = GSON.fromJson(r, Data.class);
 			if (d == null) return;
-			autoDetectItem    = d.autoDetectItem;
-			allowIncompatible = d.allowIncompatible;
-			listViewPhase3    = d.listViewPhase3;
+			autoDetectItem      = d.autoDetectItem;
+			allowIncompatible   = d.allowIncompatible;
+			listViewPhase3      = d.listViewPhase3;
+			showModButtonPhase1 = d.showModButtonPhase1;
+			showModButtonPhase2 = d.showModButtonPhase2;
 			try { autoFillMode = AutoFillMode.valueOf(d.autoFillMode); }
 			catch (IllegalArgumentException ignored) { autoFillMode = AutoFillMode.OFF; }
 		} catch (Exception e) {
@@ -58,10 +68,12 @@ public class AeogConfig {
 	public static void save() {
 		try (Writer w = new FileWriter(CONFIG_PATH.toFile())) {
 			Data d = new Data();
-			d.autoDetectItem    = autoDetectItem;
-			d.autoFillMode      = autoFillMode.name();
-			d.allowIncompatible = allowIncompatible;
-			d.listViewPhase3    = listViewPhase3;
+			d.autoDetectItem      = autoDetectItem;
+			d.autoFillMode        = autoFillMode.name();
+			d.allowIncompatible   = allowIncompatible;
+			d.listViewPhase3      = listViewPhase3;
+			d.showModButtonPhase1 = showModButtonPhase1;
+			d.showModButtonPhase2 = showModButtonPhase2;
 			GSON.toJson(d, w);
 		} catch (Exception ignored) {}
 	}

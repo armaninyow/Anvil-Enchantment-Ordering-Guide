@@ -72,6 +72,24 @@ public class ModMenuIntegration implements ModMenuApi {
 			.setSaveConsumer(val -> AeogConfig.listViewPhase3 = (val == Phase3ViewMode.LIST))
 			.build());
 
+		// ── Setting 5: Show mod button in Phase 1 ─────────────────────────────
+		cat.addEntry(eb.startBooleanToggle(
+				Text.translatable("config.aeog.showModButtonPhase1"),
+				AeogConfig.showModButtonPhase1)
+			.setDefaultValue(false)
+			.setTooltip(Text.translatable("config.aeog.showModButtonPhase1.tooltip"))
+			.setSaveConsumer(val -> AeogConfig.showModButtonPhase1 = val)
+			.build());
+
+		// ── Setting 6: Show mod button in Phase 2 ─────────────────────────────
+		cat.addEntry(eb.startBooleanToggle(
+				Text.translatable("config.aeog.showModButtonPhase2"),
+				AeogConfig.showModButtonPhase2)
+			.setDefaultValue(false)
+			.setTooltip(Text.translatable("config.aeog.showModButtonPhase2.tooltip"))
+			.setSaveConsumer(val -> AeogConfig.showModButtonPhase2 = val)
+			.build());
+
 		return builder.build();
 	}
 }
