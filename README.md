@@ -23,6 +23,9 @@ If you encounter bugs or wish to contribute:
 <details>
   <summary></summary>
    
+### 3.0.0—26.x
+* Added support for Minecraft 26.1, 26.1.1, and 26.1.2
+* Replaced Cloth Config with YetAnotherConfigLib (YACL) 3.9.3 for the in-game config screen
 ### 2.1.0—1.21.x
 * Added support for modded items in Phase 1
 * Added support for modded enchantments in Phase 2 and 3
