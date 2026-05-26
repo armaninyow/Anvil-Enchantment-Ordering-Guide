@@ -2,14 +2,11 @@ package com.armaninyow.dibs.config;
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
-import me.shedaniel.clothconfig2.api.ConfigBuilder;
-import me.shedaniel.clothconfig2.api.ConfigCategory;
-import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
-
-import java.util.List;
-import java.util.Optional;
+import dev.isxander.yacl3.api.*;
+import dev.isxander.yacl3.api.controller.BooleanControllerBuilder;
+import dev.isxander.yacl3.api.controller.EnumControllerBuilder;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 public class ModMenuIntegration implements ModMenuApi {
 
@@ -21,75 +18,69 @@ public class ModMenuIntegration implements ModMenuApi {
 	}
 
 	private Screen buildScreen(Screen parent) {
-		ConfigBuilder builder = ConfigBuilder.create()
-			.setParentScreen(parent)
-			.setTitle(Text.translatable("config.aeog.title"))
-			.setSavingRunnable(AeogConfig::save);
+		return YetAnotherConfigLib.createBuilder()
+			.title(Component.translatable("config.aeog.title"))
+			.category(ConfigCategory.createBuilder()
+				.name(Component.translatable("config.aeog.category.general"))
 
-		ConfigEntryBuilder eb = builder.entryBuilder();
-		ConfigCategory cat = builder.getOrCreateCategory(Text.translatable("config.aeog.category.general"));
+				// ── Setting 1: Auto-detect item ───────────────────────────────────────
+				.option(Option.<Boolean>createBuilder()
+					.name(Component.translatable("config.aeog.autoDetectItem"))
+					.description(OptionDescription.of(Component.translatable("config.aeog.autoDetectItem.tooltip")))
+					.binding(false, () -> AeogConfig.autoDetectItem, val -> AeogConfig.autoDetectItem = val)
+					.controller(opt -> BooleanControllerBuilder.create(opt).yesNoFormatter())
+					.build())
 
-		// ── Setting 1: Auto-detect item ───────────────────────────────────────
-		cat.addEntry(eb.startBooleanToggle(
-				Text.translatable("config.aeog.autoDetectItem"),
-				AeogConfig.autoDetectItem)
-			.setDefaultValue(false)
-			.setTooltip(Text.translatable("config.aeog.autoDetectItem.tooltip"))
-			.setSaveConsumer(val -> AeogConfig.autoDetectItem = val)
-			.build());
+				// ── Setting 2: Auto-fill mode ─────────────────────────────────────────
+				.option(Option.<AeogConfig.AutoFillMode>createBuilder()
+					.name(Component.translatable("config.aeog.autoFillMode"))
+					.description(OptionDescription.of(
+						Component.translatable("config.aeog.autoFillMode.tooltip")))
+					.binding(AeogConfig.AutoFillMode.OFF, () -> AeogConfig.autoFillMode, val -> AeogConfig.autoFillMode = val)
+					.controller(opt -> EnumControllerBuilder.create(opt)
+						.enumClass(AeogConfig.AutoFillMode.class)
+						.formatValue(e -> Component.translatable("config.aeog.autoFillMode." + e.name().toLowerCase())))
+					.build())
 
-		// ── Setting 2: Auto-fill mode ─────────────────────────────────────────
-		cat.addEntry(eb.startEnumSelector(
-				Text.translatable("config.aeog.autoFillMode"),
-				AeogConfig.AutoFillMode.class,
-				AeogConfig.autoFillMode)
-			.setDefaultValue(AeogConfig.AutoFillMode.OFF)
-			.setTooltip(
-				Text.translatable("config.aeog.autoFillMode.tooltip.off"),
-				Text.translatable("config.aeog.autoFillMode.tooltip.max"),
-				Text.translatable("config.aeog.autoFillMode.tooltip.inv"))
-			.setEnumNameProvider(e -> Text.translatable("config.aeog.autoFillMode." + e.name().toLowerCase()))
-			.setSaveConsumer(val -> AeogConfig.autoFillMode = val)
-			.build());
+				// ── Setting 3: Allow incompatible ─────────────────────────────────────
+				.option(Option.<Boolean>createBuilder()
+					.name(Component.translatable("config.aeog.allowIncompatible"))
+					.description(OptionDescription.of(Component.translatable("config.aeog.allowIncompatible.tooltip")))
+					.binding(false, () -> AeogConfig.allowIncompatible, val -> AeogConfig.allowIncompatible = val)
+					.controller(opt -> BooleanControllerBuilder.create(opt).yesNoFormatter())
+					.build())
 
-		// ── Setting 3: Allow incompatible ─────────────────────────────────────
-		cat.addEntry(eb.startBooleanToggle(
-				Text.translatable("config.aeog.allowIncompatible"),
-				AeogConfig.allowIncompatible)
-			.setDefaultValue(false)
-			.setTooltip(Text.translatable("config.aeog.allowIncompatible.tooltip"))
-			.setSaveConsumer(val -> AeogConfig.allowIncompatible = val)
-			.build());
+				// ── Setting 4: Phase 3 view mode ─────────────────────────────────────
+				.option(Option.<Phase3ViewMode>createBuilder()
+					.name(Component.translatable("config.aeog.phase3ViewMode"))
+					.description(OptionDescription.of(Component.translatable("config.aeog.phase3ViewMode.tooltip")))
+					.binding(Phase3ViewMode.TREE,
+						() -> AeogConfig.listViewPhase3 ? Phase3ViewMode.LIST : Phase3ViewMode.TREE,
+						val -> AeogConfig.listViewPhase3 = (val == Phase3ViewMode.LIST))
+					.controller(opt -> EnumControllerBuilder.create(opt)
+						.enumClass(Phase3ViewMode.class)
+						.formatValue(e -> Component.translatable("config.aeog.phase3ViewMode." + e.name().toLowerCase())))
+					.build())
 
-		// ── Setting 4: Phase 3 view mode ─────────────────────────────────────
-		cat.addEntry(eb.startEnumSelector(
-				Text.translatable("config.aeog.phase3ViewMode"),
-				Phase3ViewMode.class,
-				AeogConfig.listViewPhase3 ? Phase3ViewMode.LIST : Phase3ViewMode.TREE)
-			.setDefaultValue(Phase3ViewMode.TREE)
-			.setTooltip(Text.translatable("config.aeog.phase3ViewMode.tooltip"))
-			.setEnumNameProvider(e -> Text.translatable("config.aeog.phase3ViewMode." + e.name().toLowerCase()))
-			.setSaveConsumer(val -> AeogConfig.listViewPhase3 = (val == Phase3ViewMode.LIST))
-			.build());
+				// ── Setting 5: Show mod button in Phase 1 ─────────────────────────────
+				.option(Option.<Boolean>createBuilder()
+					.name(Component.translatable("config.aeog.showModButtonPhase1"))
+					.description(OptionDescription.of(Component.translatable("config.aeog.showModButtonPhase1.tooltip")))
+					.binding(false, () -> AeogConfig.showModButtonPhase1, val -> AeogConfig.showModButtonPhase1 = val)
+					.controller(opt -> BooleanControllerBuilder.create(opt).yesNoFormatter())
+					.build())
 
-		// ── Setting 5: Show mod button in Phase 1 ─────────────────────────────
-		cat.addEntry(eb.startBooleanToggle(
-				Text.translatable("config.aeog.showModButtonPhase1"),
-				AeogConfig.showModButtonPhase1)
-			.setDefaultValue(false)
-			.setTooltip(Text.translatable("config.aeog.showModButtonPhase1.tooltip"))
-			.setSaveConsumer(val -> AeogConfig.showModButtonPhase1 = val)
-			.build());
+				// ── Setting 6: Show mod button in Phase 2 ─────────────────────────────
+				.option(Option.<Boolean>createBuilder()
+					.name(Component.translatable("config.aeog.showModButtonPhase2"))
+					.description(OptionDescription.of(Component.translatable("config.aeog.showModButtonPhase2.tooltip")))
+					.binding(false, () -> AeogConfig.showModButtonPhase2, val -> AeogConfig.showModButtonPhase2 = val)
+					.controller(opt -> BooleanControllerBuilder.create(opt).yesNoFormatter())
+					.build())
 
-		// ── Setting 6: Show mod button in Phase 2 ─────────────────────────────
-		cat.addEntry(eb.startBooleanToggle(
-				Text.translatable("config.aeog.showModButtonPhase2"),
-				AeogConfig.showModButtonPhase2)
-			.setDefaultValue(false)
-			.setTooltip(Text.translatable("config.aeog.showModButtonPhase2.tooltip"))
-			.setSaveConsumer(val -> AeogConfig.showModButtonPhase2 = val)
-			.build());
-
-		return builder.build();
+				.build())
+			.save(AeogConfig::save)
+			.build()
+			.generateScreen(parent);
 	}
 }

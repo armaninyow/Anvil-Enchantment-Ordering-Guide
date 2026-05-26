@@ -22,8 +22,8 @@ public final class EnchantData {
 
 	/** True only on versions that include spear items (1.21.11+). Checked lazily. */
 	public static boolean hasSpear() {
-		return net.minecraft.registry.Registries.ITEM.containsId(
-			net.minecraft.util.Identifier.of("minecraft", "wooden_spear"));
+		return net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(
+			net.minecraft.resources.Identifier.fromNamespaceAndPath("minecraft", "wooden_spear"));
 	}
 
 	/**

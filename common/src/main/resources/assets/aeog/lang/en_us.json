@@ -3,18 +3,16 @@
 	"config.aeog.category.general": "General",
 
 	"config.aeog.autoDetectItem": "Auto-Detect Item from Anvil Slot",
-	"config.aeog.autoDetectItem.tooltip": "When enabled, placing an item in the\nanvil's left slot will automatically skip\nPhase 1 and open Phase 2 for that item.",
+	"config.aeog.autoDetectItem.tooltip": "When enabled, placing an item in the anvil's left slot will automatically skip Phase 1 and open Phase 2 for that item.",
 
 	"config.aeog.autoFillMode": "Auto-Fill Enchantment Levels",
 	"config.aeog.autoFillMode.off": "Off",
 	"config.aeog.autoFillMode.max_levels": "Max Levels",
 	"config.aeog.autoFillMode.from_inventory": "From Inventory",
-	"config.aeog.autoFillMode.tooltip.off": "No automatic level selection.",
-	"config.aeog.autoFillMode.tooltip.max": "Max Levels:\nAutomatically selects the maximum level\nfor every enchantment (excluding curses).",
-	"config.aeog.autoFillMode.tooltip.inv": "From Inventory:\nSelects levels based on enchanted books\ncurrently in your inventory.",
+	"config.aeog.autoFillMode.tooltip": "Max Levels:\nAutomatically selects the maximum level for every enchantment (excluding curses).\n\nFrom Inventory:\nSelects levels based on enchanted books currently in your inventory.",
 
 	"config.aeog.allowIncompatible": "Allow Incompatible Enchantments",
-	"config.aeog.allowIncompatible.tooltip": "Removes grouping and disabling of incompatible\nenchantments in Phase 2. Only useful if you\nhave a mod/datapack that overrides vanilla\nincompatibility rules.",
+	"config.aeog.allowIncompatible.tooltip": "Removes grouping and disabling of incompatible enchantments in Phase 2. Only useful if you have a mod/datapack that overrides vanilla incompatibility rules.",
 
 	"config.aeog.phase3ViewMode": "Phase 3 View Mode",
 	"config.aeog.phase3ViewMode.tooltip": "Choose how merge steps are displayed in Phase 3.",
@@ -22,8 +20,8 @@
 	"config.aeog.phase3ViewMode.list": "List View",
 
 	"config.aeog.showModButtonPhase1": "Show Mod Button in Phase 1",
-	"config.aeog.showModButtonPhase1.tooltip": "When enabled, a button appears in Phase 1\nto switch between vanilla and modded items.",
+	"config.aeog.showModButtonPhase1.tooltip": "When enabled, a button appears in Phase 1 to switch between vanilla and modded items.",
 
 	"config.aeog.showModButtonPhase2": "Show Mod Button in Phase 2",
-	"config.aeog.showModButtonPhase2.tooltip": "When enabled, a button appears in Phase 2\nto show or hide modded enchantments."
+	"config.aeog.showModButtonPhase2.tooltip": "When enabled, a button appears in Phase 2 to show or hide modded enchantments."
 }
