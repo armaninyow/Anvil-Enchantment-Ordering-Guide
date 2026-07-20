@@ -3,11 +3,6 @@ package com.armaninyow.aeog.engine;
 import java.util.*;
 import java.util.Arrays;
 
-/**
- * Java port of data.js.
- * Provides enchant definitions (levelMax, weight, incompatible, items)
- * and the ordered item list used for Phase 1 button layout.
- */
 public final class EnchantData {
 
 	public record EnchantDef(
@@ -17,21 +12,10 @@ public final class EnchantData {
 		List<String> items
 	) {}
 
-	/** Ordered map preserving insertion order (mirrors data.js enchants object). */
 	public static final LinkedHashMap<String, EnchantDef> ENCHANTS = new LinkedHashMap<>();
 
-	/** True only on versions that include spear items (1.21.11+). Checked lazily. */
-	public static boolean hasSpear() {
-		return net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(
-			net.minecraft.resources.Identifier.fromNamespaceAndPath("minecraft", "wooden_spear"));
-	}
-
-	/**
-	 * Ordered item list for Phase 1 buttons.
-	 * Spear is included only when present in the item registry.
-	 */
 	public static List<String> getPhase1Items() {
-		ensureSpearEnchants();
+		registerSpearEnchants();
 		List<String> items = new ArrayList<>(List.of(
 			"helmet",
 			"chestplate",
@@ -40,9 +24,9 @@ public final class EnchantData {
 			"elytra",
 			"sword",
 			"axe",
-			"mace"
+			"mace",
+			"spear"
 		));
-		if (hasSpear()) items.add("spear");
 		items.addAll(List.of(
 			"trident",
 			"shield",
@@ -65,11 +49,9 @@ public final class EnchantData {
 
 	private static boolean spearRegistered = false;
 
-	/** Call before reading ENCHANTS if spear entries are needed. */
-	private static void ensureSpearEnchants() {
-		if (spearRegistered || !hasSpear()) return;
+	private static void registerSpearEnchants() {
+		if (spearRegistered) return;
 		spearRegistered = true;
-		// Add spear to existing enchant item lists
 		addItem("bane_of_arthropods", "spear");
 		addItem("fire_aspect",        "spear");
 		addItem("knockback",          "spear");
@@ -79,7 +61,6 @@ public final class EnchantData {
 		addItem("smite",              "spear");
 		addItem("unbreaking",         "spear");
 		addItem("vanishing_curse",    "spear");
-		// Patch lunge items (registered as placeholder in static block)
 		addItem("lunge", "spear");
 	}
 
@@ -127,7 +108,7 @@ public final class EnchantData {
 		reg("looting",              3, 2, List.of(),
 			List.of("sword"));
 		reg("lunge",                3, 1, List.of(),
-			List.of()); // items added lazily by ensureSpearEnchants() on 1.21.11+
+			List.of());
 		reg("loyalty",              3, 1, List.of("riptide"),
 			List.of("trident"));
 		reg("luck_of_the_sea",      3, 2, List.of(),
@@ -192,13 +173,8 @@ public final class EnchantData {
 		ENCHANTS.put(name, new EnchantDef(levelMax, weight, incompatible, items));
 	}
 
-	/**
-	 * Returns enchants applicable to the given item name.
-	 * "helmet" also includes turtle_shell enchants.
-	 */
 	public static List<String> enchantsForItem(String item) {
-		ensureSpearEnchants();
-		// "book" can hold any enchantment — skip placeholder enchants with no items
+		registerSpearEnchants();
 		if (item.equals("book")) {
 			return ENCHANTS.entrySet().stream()
 				.filter(e -> !e.getValue().items().isEmpty())

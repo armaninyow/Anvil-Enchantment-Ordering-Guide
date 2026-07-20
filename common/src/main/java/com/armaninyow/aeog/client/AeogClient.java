@@ -9,7 +9,5 @@ public class AeogClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		// All computation is now done client-side in AeogOverlayScreen.
-		// No network registration needed.
 	}
 }

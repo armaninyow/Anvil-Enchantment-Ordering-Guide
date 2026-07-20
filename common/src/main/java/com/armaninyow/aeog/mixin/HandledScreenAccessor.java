@@ -6,11 +6,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-/**
- * Exposes the protected x/y GUI origin fields from HandledScreen
- * so that AnvilScreenMixin (which targets ForgingScreen) can read them
- * without a @Shadow on the wrong class.
- */
 @Environment(EnvType.CLIENT)
 @Mixin(AbstractContainerScreen.class)
 public interface HandledScreenAccessor {

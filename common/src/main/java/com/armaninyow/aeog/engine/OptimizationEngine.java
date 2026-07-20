@@ -2,27 +2,15 @@ package com.armaninyow.aeog.engine;
 
 import java.util.*;
 
-/**
- * Pure Java port of work.js.
- *
- * Entry point: {@link #process(String, List, Mode)}
- * Returns a list of {@link MergeInstruction} representing the optimal merge tree,
- * ordered from first merge (leaves) to last merge (root / final item).
- */
 public final class OptimizationEngine {
 
 	public enum Mode { LEVELS, WORK }
 
 	private static final int MAXIMUM_MERGE_LEVELS = 39;
 
-	// ── ID table ─────────────────────────────────────────────────────────────
-
-	/** enchant name → integer id */
 	private final Map<String, Integer> idList = new LinkedHashMap<>();
-	/** id → weight */
 	private final List<Integer> enchant2Weight = new ArrayList<>();
 
-	// memoization cache, reset each process() call
 	private final Map<String, Map<Integer, ItemObj>> memo = new HashMap<>();
 
 	public OptimizationEngine() {
@@ -34,10 +22,6 @@ public final class OptimizationEngine {
 		}
 	}
 
-	/**
-	 * Registers a modded enchant with a given weight so the engine can process it.
-	 * Safe to call multiple times for the same key (idempotent).
-	 */
 	public int registerExtraEnchant(String key, int weight) {
 		if (idList.containsKey(key)) return idList.get(key);
 		int id = enchant2Weight.size();
@@ -46,7 +30,6 @@ public final class OptimizationEngine {
 		return id;
 	}
 
-	/** Returns the registered weight for an enchant key, or 1 if not found. */
 	public int getWeightFor(String key) {
 		Integer id = idList.get(key);
 		if (id == null || id >= enchant2Weight.size()) return 1;
@@ -54,18 +37,9 @@ public final class OptimizationEngine {
 		return w > 0 ? w : 1;
 	}
 
-	// ── Public API ───────────────────────────────────────────────────────────
-
-	/**
-	 * @param itemName  one of the PHASE1_ITEMS keys (or "book")
-	 * @param enchants  list of [enchantName, level] pairs (level as int)
-	 * @param mode      LEVELS = minimise total xp, WORK = minimise prior-work penalty
-	 * @return ordered instruction list (first merge first), never null
-	 */
 	public List<MergeInstruction> process(String itemName, List<int[]> enchants, Mode mode) {
 		memo.clear();
 
-		// Build book objects
 		List<ItemObj> enchantObjs = new ArrayList<>();
 		for (int[] pair : enchants) {
 			int id = pair[0];
@@ -74,10 +48,8 @@ public final class OptimizationEngine {
 			ItemObj e = new ItemObj("book", value, new ArrayList<>(List.of(id)));
 			enchantObjs.add(e);
 		}
-		// Sort by value descending to match JS engine ordering (stable sort preserves tie order)
 		enchantObjs.sort((a, b) -> Integer.compare(b.l, a.l));
 
-		// Find most expensive
 		int mostExpensive = indexOfMostExpensive(enchantObjs);
 
 		ItemObj baseItem;
@@ -92,9 +64,7 @@ public final class OptimizationEngine {
 			baseItem = new ItemObj("item");
 		}
 
-		// First merge
 		if (enchantObjs.isEmpty()) {
-			// Only one enchant — nothing to merge further
 			List<MergeInstruction> out = new ArrayList<>();
 			addInstructions(baseItem.c, out, itemName);
 			return out;
@@ -126,8 +96,6 @@ public final class OptimizationEngine {
 		return instructions;
 	}
 
-	// ── Internals ─────────────────────────────────────────────────────────────
-
 	private int indexOfMostExpensive(List<ItemObj> list) {
 		int maxIdx = 0;
 		for (int i = 1; i < list.size(); i++) {
@@ -136,16 +104,12 @@ public final class OptimizationEngine {
 		return maxIdx;
 	}
 
-	// ── experience() ─────────────────────────────────────────────────────────
-
 	private static int experience(int level) {
 		if (level == 0) return 0;
 		if (level <= 16) return level * level + 6 * level;
 		if (level <= 31) return (int)(2.5 * level * level - 40.5 * level + 360);
 		return (int)(4.5 * level * level - 162.5 * level + 2220);
 	}
-
-	// ── cheapestItemsFromList (memoized) ──────────────────────────────────────
 
 	private Map<Integer, ItemObj> cheapestItemsFromList(List<ItemObj> items) {
 		String key = memoKey(items);
@@ -239,7 +203,6 @@ public final class OptimizationEngine {
 		return cheapestWork2Item;
 	}
 
-	/** Returns all combinations of `k` indices chosen from [0, n). */
 	private List<int[]> indexCombinations(int n, int k) {
 		List<int[]> result = new ArrayList<>();
 		indexCombHelper(0, n, k, new int[k], 0, result);
@@ -288,12 +251,6 @@ public final class OptimizationEngine {
 		return a.x <= b.x ? a : b;
 	}
 
-	// ── Instruction extraction ────────────────────────────────────────────────
-
-	/**
-	 * Recursively walks the c-tree and appends MergeInstructions.
-	 * Mirrors getInstructions() in work.js.
-	 */
 	private void addInstructions(CNode comb, List<MergeInstruction> out, String itemName) {
 		if (comb == null) return;
 		if (comb.L != null && comb.L.nested != null) addInstructions(comb.L.nested, out, itemName);
@@ -302,14 +259,11 @@ public final class OptimizationEngine {
 		if (comb.L == null || comb.R == null) return;
 
 		int mergeCost;
-		// R.valueOverride is set for single-enchant leaf books (val = level * weight)
-		// For nested refs, we need R's total enchant value = comb.R.nested.v
-		// For direct refs, R.l holds the enchant value
 		int rVal;
 		if (comb.R.valueOverride >= 0) {
 			rVal = comb.R.valueOverride;
 		} else if (comb.R.nested != null) {
-			rVal = comb.R.nested.v; // v = total enchant value of the merged subtree
+			rVal = comb.R.nested.v;
 		} else {
 			rVal = comb.R.l;
 		}
@@ -328,28 +282,22 @@ public final class OptimizationEngine {
 		List<String[]> enchants = new ArrayList<>();
 
 		if (ref.enchantId >= 0) {
-			// Single-enchant book leaf — id is the enchant name, type is "book"
 			id = "book";
 			String enchantName = enchantNameFromId(ref.enchantId);
-			// level = value / weight; we don't store level directly but can recover it
-			// Use valueOverride if set, otherwise ref.l
 			int val = ref.valueOverride >= 0 ? ref.valueOverride : ref.l;
 			int weight = enchant2Weight.get(ref.enchantId);
 			int level  = (weight > 0) ? (val / weight) : 1;
 			enchants.add(new String[]{enchantName, String.valueOf(level)});
 		} else if (ref.nested != null) {
-			// Intermediate node — gather enchants from all leaf IDs in this subtree
 			id = resolveNodeId(ref.nested, itemName);
 			enchants = collectEnchants(ref.nested);
 		} else {
-			// Direct item/book ref
 			String rawId = ref.itemId != null ? ref.itemId : itemName;
 			if (rawId.equals("item")) {
 				id = itemName;
 			} else if (rawId.equals("book") || idList.containsKey(rawId)) {
 				id = "book";
 				if (idList.containsKey(rawId)) {
-					// This is an enchant-named id used as a book
 					int eid = idList.get(rawId);
 					int val    = ref.valueOverride >= 0 ? ref.valueOverride : ref.l;
 					int weight = enchant2Weight.get(eid);
@@ -365,10 +313,6 @@ public final class OptimizationEngine {
 		return new MergeInstruction.NodeItem(id, enchants, ref.w, ref.l);
 	}
 
-	/**
-	 * Determines whether a subtree rooted at comb represents a book (all enchant IDs)
-	 * or the actual item (contains an "item" leaf).
-	 */
 	private String resolveNodeId(CNode comb, String itemName) {
 		if (comb == null) return "book";
 		if (hasItemLeaf(comb)) return itemName;
@@ -392,10 +336,6 @@ public final class OptimizationEngine {
 		return false;
 	}
 
-	/**
-	 * Recursively collects all enchant name+level pairs from a subtree.
-	 * Used to populate the enchant list on intermediate nodes.
-	 */
 	private List<String[]> collectEnchants(CNode comb) {
 		List<String[]> result = new ArrayList<>();
 		if (comb == null) return result;
@@ -434,9 +374,8 @@ public final class OptimizationEngine {
 		if (item.i.equals("item")) {
 			ref.itemId = itemName;
 		} else if (item.i.equals("book") && item.e.size() == 1) {
-			// Single-enchant book — store enchantId so toNodeItem can recover name+level
 			ref.enchantId     = item.e.get(0);
-			ref.valueOverride = item.l; // = level * weight, used to recover level in toNodeItem
+			ref.valueOverride = item.l;
 		} else {
 			ref.itemId = item.i;
 		}
@@ -445,16 +384,13 @@ public final class OptimizationEngine {
 		return ref;
 	}
 
-	// ── Internal object model ────────────────────────────────────────────────
-
-	/** Mirrors item_obj in work.js */
 	static class ItemObj {
-		String i;   // item namespace
-		List<Integer> e; // enchant ids
-		CNode c;    // instruction tree node
-		int w;      // work
-		int l;      // value
-		double x;   // total xp
+		String i;
+		List<Integer> e;
+		CNode c;
+		int w;
+		int l;
+		double x;
 
 		ItemObj(String name, int value, List<Integer> ids) {
 			this.i = name; this.l = value; this.e = new ArrayList<>(ids);
@@ -464,7 +400,6 @@ public final class OptimizationEngine {
 		ItemObj(String name) { this(name, 0, new ArrayList<>()); }
 	}
 
-	/** Mirrors MergeEnchants in work.js */
 	class MergeObj extends ItemObj {
 		MergeObj(ItemObj left, ItemObj right) {
 			super(left.i, left.l + right.l);
@@ -499,10 +434,9 @@ public final class OptimizationEngine {
 		}
 	}
 
-	/** Instruction tree node — mirrors c in work.js */
 	static class CNode {
 		Ref L, R;
-		int l, w, v; // merge_cost, work, value
+		int l, w, v;
 
 		CNode() {}
 		CNode(int enchantId, int l, int w) {
@@ -518,12 +452,12 @@ public final class OptimizationEngine {
 		}
 
 		static class Ref {
-			CNode nested;       // non-null → recurse
-			int enchantId = -1; // >= 0 → single enchant book leaf
-			String itemId;      // non-null → item/book leaf
-			List<String[]> enchantsList; // assembled enchant list for display
+			CNode nested;
+			int enchantId = -1;
+			String itemId;
+			List<String[]> enchantsList;
 			int w, l;
-			int valueOverride = -1; // mirrors c.v in work.js
+			int valueOverride = -1;
 		}
 	}
 

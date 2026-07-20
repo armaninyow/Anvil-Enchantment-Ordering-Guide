@@ -7,37 +7,25 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.*;
 import java.nio.file.Path;
 
-/**
- * Holds all AEOG mod settings, with JSON persistence in the config folder.
- */
 public class AeogConfig {
 
-	// ── Setting 1: Auto-detect item from anvil slot ───────────────────────────
 	public static boolean autoDetectItem = false;
 
-	// ── Setting 2: Auto-fill Phase 2 levels ──────────────────────────────────
 	public enum AutoFillMode { OFF, MAX_LEVELS, FROM_INVENTORY }
 	public static AutoFillMode autoFillMode = AutoFillMode.OFF;
 
-	// ── Setting 3: Allow incompatible enchantments ────────────────────────────
 	public static boolean allowIncompatible = false;
 
-	// ── Setting 4: Phase 3 list view ─────────────────────────────────────────
 	public static boolean listViewPhase3 = false;
 
-	// ── Setting 5: Show mod button in Phase 1 ────────────────────────────────
 	public static boolean showModButtonPhase1 = false;
 
-	// ── Setting 6: Show mod button in Phase 2 ────────────────────────────────
 	public static boolean showModButtonPhase2 = false;
-
-	// ── Persistence ───────────────────────────────────────────────────────────
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static final Path CONFIG_PATH =
 		FabricLoader.getInstance().getConfigDir().resolve("aeog.json");
 
-	/** Data class mirroring the static fields for JSON serialization. */
 	private static class Data {
 		boolean autoDetectItem    = false;
 		String  autoFillMode      = "OFF";
@@ -61,7 +49,7 @@ public class AeogConfig {
 			try { autoFillMode = AutoFillMode.valueOf(d.autoFillMode); }
 			catch (IllegalArgumentException ignored) { autoFillMode = AutoFillMode.OFF; }
 		} catch (Exception e) {
-			save(); // write defaults if file is corrupt
+			save();
 		}
 	}
 

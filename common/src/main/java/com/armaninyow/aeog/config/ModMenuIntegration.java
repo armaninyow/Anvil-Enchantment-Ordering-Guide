@@ -23,7 +23,6 @@ public class ModMenuIntegration implements ModMenuApi {
 			.category(ConfigCategory.createBuilder()
 				.name(Component.translatable("config.aeog.category.general"))
 
-				// ── Setting 1: Auto-detect item ───────────────────────────────────────
 				.option(Option.<Boolean>createBuilder()
 					.name(Component.translatable("config.aeog.autoDetectItem"))
 					.description(OptionDescription.of(Component.translatable("config.aeog.autoDetectItem.tooltip")))
@@ -31,7 +30,6 @@ public class ModMenuIntegration implements ModMenuApi {
 					.controller(opt -> BooleanControllerBuilder.create(opt).yesNoFormatter())
 					.build())
 
-				// ── Setting 2: Auto-fill mode ─────────────────────────────────────────
 				.option(Option.<AeogConfig.AutoFillMode>createBuilder()
 					.name(Component.translatable("config.aeog.autoFillMode"))
 					.description(OptionDescription.of(
@@ -42,7 +40,6 @@ public class ModMenuIntegration implements ModMenuApi {
 						.formatValue(e -> Component.translatable("config.aeog.autoFillMode." + e.name().toLowerCase())))
 					.build())
 
-				// ── Setting 3: Allow incompatible ─────────────────────────────────────
 				.option(Option.<Boolean>createBuilder()
 					.name(Component.translatable("config.aeog.allowIncompatible"))
 					.description(OptionDescription.of(Component.translatable("config.aeog.allowIncompatible.tooltip")))
@@ -50,7 +47,6 @@ public class ModMenuIntegration implements ModMenuApi {
 					.controller(opt -> BooleanControllerBuilder.create(opt).yesNoFormatter())
 					.build())
 
-				// ── Setting 4: Phase 3 view mode ─────────────────────────────────────
 				.option(Option.<Phase3ViewMode>createBuilder()
 					.name(Component.translatable("config.aeog.phase3ViewMode"))
 					.description(OptionDescription.of(Component.translatable("config.aeog.phase3ViewMode.tooltip")))
@@ -62,7 +58,6 @@ public class ModMenuIntegration implements ModMenuApi {
 						.formatValue(e -> Component.translatable("config.aeog.phase3ViewMode." + e.name().toLowerCase())))
 					.build())
 
-				// ── Setting 5: Show mod button in Phase 1 ─────────────────────────────
 				.option(Option.<Boolean>createBuilder()
 					.name(Component.translatable("config.aeog.showModButtonPhase1"))
 					.description(OptionDescription.of(Component.translatable("config.aeog.showModButtonPhase1.tooltip")))
@@ -70,7 +65,6 @@ public class ModMenuIntegration implements ModMenuApi {
 					.controller(opt -> BooleanControllerBuilder.create(opt).yesNoFormatter())
 					.build())
 
-				// ── Setting 6: Show mod button in Phase 2 ─────────────────────────────
 				.option(Option.<Boolean>createBuilder()
 					.name(Component.translatable("config.aeog.showModButtonPhase2"))
 					.description(OptionDescription.of(Component.translatable("config.aeog.showModButtonPhase2.tooltip")))

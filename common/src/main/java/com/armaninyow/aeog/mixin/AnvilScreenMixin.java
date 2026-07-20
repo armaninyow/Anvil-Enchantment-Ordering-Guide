@@ -41,16 +41,13 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 	@Unique private static final int BTN_REL_X = 4;
 	@Unique private static final int BTN_REL_Y = 46;
 
-	// panel(194) + gap(2) + anvil(176) = 372. Shift right by (194+2)/2 = 98.
 	@Unique private static final int CENTRE_SHIFT = (AeogOverlayScreen.P_W + 2) / 2;
 
 	@Unique private boolean aeog$panelOpen    = false;
 	@Unique private boolean aeog$wasDown      = false;
 	@Unique private boolean aeog$justOpened   = false;
-	@Unique private boolean aeog$shifted      = false; // tracks whether x has been shifted
+	@Unique private boolean aeog$shifted      = false;
 	@Unique private AeogOverlayScreen aeog$panel = null;
-
-	// ── init: restore panel state when anvil screen opens ────────────────────
 
 	@Inject(at = @At("TAIL"), method = "init")
 	private void aeog$onInit(CallbackInfo ci) {
@@ -60,16 +57,11 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 		}
 	}
 
-	// ── removed: save state when anvil screen closes ──────────────────────────
-
 	@Inject(at = @At("HEAD"), method = "removed")
 	private void aeog$onRemoved(CallbackInfo ci) {
 		if (!((Object)this instanceof net.minecraft.client.gui.screens.inventory.AnvilScreen)) return;
 		if (aeog$panel != null) aeog$panel.saveState();
-		// Don't change s_panelWasOpen here — preserve whatever it was last set to
 	}
-
-	// ── drawBackground: draw guide button ────────────────────────────────────
 
 	@Inject(at = @At("TAIL"), method = "extractBackground")
 	private void aeog$drawBtn(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta, CallbackInfo ci) {
@@ -103,8 +95,6 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 		aeog$wasDown = leftDown;
 	}
 
-	// ── render: draw full panel ───────────────────────────────────────────────
-
 	@Inject(at = @At("TAIL"), method = "extractBackground")
 	private void aeog$render(GuiGraphicsExtractor ctx, int guiLeft, int guiTop, float delta, CallbackInfo ci) {
 		if (!((Object)this instanceof net.minecraft.client.gui.screens.inventory.AnvilScreen)) return;
@@ -114,14 +104,12 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 		int mouseX = (int)(_mc.mouseHandler.xpos() * _mc.getWindow().getGuiScaledWidth() / _mc.getWindow().getScreenWidth());
 		int mouseY = (int)(_mc.mouseHandler.ypos() * _mc.getWindow().getGuiScaledHeight() / _mc.getWindow().getScreenHeight());
 
-		// Setting 1: auto-detect item in anvil target slot — works whether panel is open or not
 		net.minecraft.world.item.ItemStack targetStack = net.minecraft.world.item.ItemStack.EMPTY;
 		if (((net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?>)(Object)this)
 				.getMenu() instanceof net.minecraft.world.inventory.ItemCombinerMenu fsh) {
 			targetStack = fsh.getSlot(0).getItem();
 		}
 
-		// If panel is closed but auto-detect fires, open it first
 		if (!aeog$panelOpen && com.armaninyow.dibs.config.AeogConfig.autoDetectItem
 				&& !targetStack.isEmpty()) {
 			aeog$openPanel();
@@ -129,7 +117,6 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 
 		if (!aeog$panelOpen || aeog$panel == null) return;
 
-		// Tick auto-detect
 		aeog$panel.tickAutoDetect(targetStack);
 
 		aeog$panel.setJustOpened(aeog$justOpened);
@@ -137,8 +124,6 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 			Minecraft.getInstance().font);
 		aeog$justOpened = false;
 	}
-
-	// ── Open / close helpers that apply the permanent shift ───────────────────
 
 	@Unique private void aeog$openPanel() {
 		if (aeog$panelOpen) return;
@@ -158,7 +143,6 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 		applyShift(-CENTRE_SHIFT);
 	}
 
-	/** Permanently shifts HandledScreen.x and all TextFieldWidgets by delta. */
 	@Unique private void applyShift(int delta) {
 		if (!((Object)this instanceof net.minecraft.client.gui.screens.inventory.AnvilScreen)) return;
 		HandledScreenAccessor acc = (HandledScreenAccessor)(Object)this;
@@ -171,8 +155,6 @@ public abstract class AnvilScreenMixin implements AeogPanelHost {
 			}
 		}
 	}
-
-	// ── AeogPanelHost ─────────────────────────────────────────────────────────
 
 	@Override public void aeog$openOverlay()  { aeog$openPanel(); }
 	@Override public void aeog$onOverlayClosed() {
