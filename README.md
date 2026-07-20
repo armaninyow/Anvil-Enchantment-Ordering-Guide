@@ -23,6 +23,10 @@ If you encounter bugs or wish to contribute:
 <details>
   <summary></summary>
    
+### 3.1.0—26.x
+* Added support for Minecraft 26.2
+* Added the ability to click obtained nodes (initial and progress frames) in Phase 3 (for tree view and list view) to send items directly into the anvil slots
+* Updated mod button textures
 ### 3.0.0—26.x
 * Added support for Minecraft 26.1, 26.1.1, and 26.1.2
 * Replaced Cloth Config with YetAnotherConfigLib (YACL) 3.9.3 for the in-game config screen
